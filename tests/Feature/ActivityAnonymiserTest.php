@@ -312,6 +312,7 @@ it('anonymises more rows than one chunk', function (): void {
         'causer_type' => 'user',
         'causer_id' => (string) $person->getKey(),
         'properties' => json_encode(['email' => 'x']),
+        'created_at' => now('UTC'),
     ]);
     $rows->chunk(250)->each(fn ($chunk) => DB::table('activity_log')->insert($chunk->values()->all()));
 
