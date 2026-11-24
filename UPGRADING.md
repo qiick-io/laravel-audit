@@ -37,9 +37,13 @@ For excubia-app, signaculum-core and instituta-core (design §6.1). externa
    resolver: the organisation of the current team context, never a user's
    first membership.
 7. Call `Qiick\Audit\Contracts\AuditAnonymiser` from the erasure job, in the
-   same transaction as the user tombstoning.
+   same transaction as the user tombstoning. Rows written before the product
+   set a morph map store the class name as morph type: pass a
+   `new MorphRef(User::class, (string) $user->getKey())` next to
+   `MorphRef::of($user)` so those rows are found too.
 8. `activitylog:clean` can be removed from the schedule: the package
-   schedules `audit:purge` daily (365 days, 730 for the `auth` log). If it
+   schedules `audit:purge` daily (365 days, 730 for the security logs `auth`,
+   `security`, `access` and `api-keys`). If it
    stays, it goes through the same two floors. Product prune commands that
    delete activity rows (for example after 90 days) must go: no row may leave
    before its floor.
