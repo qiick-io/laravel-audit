@@ -1,0 +1,77 @@
+{
+    "$schema": "https://getcomposer.org/schema.json",
+    "name": "qiick/laravel-audit",
+    "description": "Shared audit log for qiick Laravel products: the activity_log table, a secret-safe logging trait, server-side attribution, GDPR anonymisation and two-floor retention.",
+    "type": "library",
+    "keywords": [
+        "qiick",
+        "laravel",
+        "audit",
+        "activity-log",
+        "gdpr",
+        "security"
+    ],
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Qiick",
+            "homepage": "https://qiick.io"
+        }
+    ],
+    "homepage": "https://github.com/qiick-io/laravel-audit",
+    "support": {
+        "issues": "https://github.com/qiick-io/laravel-audit/issues",
+        "source": "https://github.com/qiick-io/laravel-audit"
+    },
+    "require": {
+        "php": "^8.4",
+        "illuminate/console": "^12.0 || ^13.0",
+        "illuminate/contracts": "^12.0 || ^13.0",
+        "illuminate/database": "^12.0 || ^13.0",
+        "illuminate/http": "^12.0 || ^13.0",
+        "illuminate/support": "^12.0 || ^13.0",
+        "spatie/laravel-activitylog": "^5.0"
+    },
+    "require-dev": {
+        "larastan/larastan": "^3.3",
+        "laravel/pint": "^1.30",
+        "nunomaduro/collision": "^8.5",
+        "orchestra/testbench": "^10.0 || ^11.0",
+        "pestphp/pest": "^4.0",
+        "pestphp/pest-plugin-mutate": "^4.0",
+        "phpstan/phpstan": "^2.1"
+    },
+    "suggest": {
+        "qiick/laravel-access": "Fills actor_kind from its ActorContext (design §4)."
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Qiick\\Audit\\Laravel\\AuditServiceProvider"
+            ]
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Qiick\\Audit\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Qiick\\Audit\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "pest",
+        "lint": "pint --test",
+        "analyse": "phpstan analyse --memory-limit=1G"
+    },
+    "config": {
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        },
+        "sort-packages": true
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
