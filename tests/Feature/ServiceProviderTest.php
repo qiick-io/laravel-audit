@@ -37,5 +37,6 @@ it('merges the design defaults under the audit key', function (): void {
 it('publishes the config under the audit-config tag', function (): void {
     $publishedPaths = ServiceProvider::pathsToPublish(AuditServiceProvider::class, 'audit-config');
 
-    expect(array_values($publishedPaths))->toBe([config_path('audit.php')]);
+    expect(array_map(realpath(...), array_keys($publishedPaths)))->toBe([realpath(dirname(__DIR__, 2).'/config/audit.php')])
+        ->and(array_values($publishedPaths))->toBe([config_path('audit.php')]);
 });
