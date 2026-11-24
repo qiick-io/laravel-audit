@@ -6,6 +6,7 @@ use Illuminate\Auth\GenericUser;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Facades\Context;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
 use Qiick\Access\Contracts\ActorContext;
@@ -307,19 +308,38 @@ it('records no request id when the context has none or an unusable one', functio
     expect(Activity::query()->sole()->request_id)->toBeNull();
 })->with([
     'none' => [null],
-    'too long' => [str_repeat('a', 65)],
+    'too long' => [str_repeat('a', 129)],
     'not a string' => [42],
     'empty' => [''],
     'line break' => ["abc\r\ndef"],
     'space' => ['abc def'],
 ]);
 
-it('accepts a 64-character request id', function (): void {
-    Context::add('request_id', str_repeat('f', 64));
+it('accepts a request id of 128 characters, as http-basics does', function (): void {
+    Context::add('request_id', str_repeat('f', 128));
 
     activity()->log('long id');
 
-    expect(Activity::query()->sole()->request_id)->toBe(str_repeat('f', 64));
+    expect(Activity::query()->sole()->request_id)->toBe(str_repeat('f', 128));
+});
+
+it('logs a warning when the context carries a request id it cannot store', function (): void {
+    $log = Log::spy();
+    Context::add('request_id', str_repeat('a', 129));
+
+    activity()->log('uncorrelated');
+
+    $log->shouldHaveReceived('warning')->once()->with(
+        'The request_id in the Laravel context is not a token of 1 to 128 [A-Za-z0-9._:-] characters: the activity row is stored without it.',
+    );
+});
+
+it('logs no warning when the context has no request id', function (): void {
+    $log = Log::spy();
+
+    activity()->log('console');
+
+    $log->shouldNotHaveReceived('warning');
 });
 
 it('attributes buffered rows the same way', function (): void {

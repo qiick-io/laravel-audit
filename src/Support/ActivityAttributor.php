@@ -31,8 +31,8 @@ use Qiick\Audit\Models\Activity;
  * - the organisation: the explicit one (Audit::inOrganisation()) or the
  *   OrganisationResolver's, never properties (A3), always a UUID;
  * - the request id, from the `request_id` key of Laravel's context (the key
- *   qiick/laravel-http-basics sets), when it is a safe token of 64
- *   characters at most.
+ *   qiick/laravel-http-basics sets), when it is a safe token of 128
+ *   characters at most; any other value is left out with a warning.
  *
  * @internal
  */
@@ -102,13 +102,25 @@ final class ActivityAttributor
 
     private function requestId(): ?string
     {
-        $requestId = $this->container->make(ContextRepository::class)->get('request_id');
+        $context = $this->container->make(ContextRepository::class);
 
-        if (! is_string($requestId) || preg_match('/\A[A-Za-z0-9._:-]{1,64}\z/', $requestId) !== 1) {
+        if (! $context->has('request_id')) {
             return null;
         }
 
-        return $requestId;
+        $requestId = $context->get('request_id');
+
+        if (is_string($requestId) && preg_match('/\A[A-Za-z0-9._:-]{1,128}\z/', $requestId) === 1) {
+            return $requestId;
+        }
+
+        // A request id that cannot be stored safely is never written, but
+        // the gap in correlation is reported rather than silent.
+        $this->container->make('log')->warning(
+            'The request_id in the Laravel context is not a token of 1 to 128 [A-Za-z0-9._:-] characters: the activity row is stored without it.',
+        );
+
+        return null;
     }
 
     private function userAgentMax(): int
