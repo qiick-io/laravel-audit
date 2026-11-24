@@ -16,7 +16,13 @@ declare(strict_types=1);
 return [
     'namespace' => 'Qiick\Audit',
 
-    'ignoring' => [],
+    'ignoring' => [
+        'traits' => [
+            // Design §4: the trait is Qiick\Audit\Concerns\LogsActivity, the
+            // name of the Spatie trait it replaces in every product model.
+            'Qiick\Audit\Concerns\LogsActivity',
+        ],
+    ],
 
     'suffixes' => [],
 

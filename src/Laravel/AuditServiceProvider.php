@@ -7,8 +7,10 @@ namespace Qiick\Audit\Laravel;
 use Illuminate\Support\ServiceProvider;
 use Qiick\Audit\Actions\LogActivityAction;
 use Qiick\Audit\Models\Activity;
+use Qiick\Audit\Support\ActivityLogger;
 use Spatie\Activitylog\Actions\LogActivityAction as SpatieLogActivityAction;
 use Spatie\Activitylog\Models\Activity as SpatieActivity;
+use Spatie\Activitylog\Support\ActivityLogger as SpatieActivityLogger;
 
 /**
  * Registers the package in a Laravel app. Auto-discovered through
@@ -52,6 +54,10 @@ final class AuditServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->useThePackageModelAndAction();
+
+        // Spatie binds its logger in register(); binding at boot replaces it
+        // whatever order the providers registered in.
+        $this->app->bind(SpatieActivityLogger::class, ActivityLogger::class);
 
         $this->publishes([
             __DIR__.'/../../config/audit.php' => $this->app->configPath('audit.php'),

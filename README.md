@@ -84,6 +84,37 @@ anonymised, never deleted on erasure. The package sets
 `activitylog.actions.log_activity` to `Qiick\Audit\Actions\LogActivityAction`
 unless the product configured subclasses of its own.
 
+## Logging trait
+
+```php
+use Qiick\Audit\Concerns\LogsActivity;
+
+final class Project extends Model
+{
+    use LogsActivity;
+
+    // Optional: a log name or extra excludes. The secret floor still applies.
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()->logAll()->logOnlyDirty()
+            ->dontLogEmptyChanges()->useLogName('projects')->logExcept(['notes']);
+    }
+}
+```
+
+The trait never logs an attribute cast as `encrypted*` or `hashed`, or named in
+`audit.sensitive_attributes` (case-insensitive), whether the model logs it by
+name, by JSON path (`settings->secret`) or through a relation
+(`owner.password`). A relation path whose segment is not a relation method is
+dropped.
+
+## Querying
+
+`Activity::query()->causedBy($user)`, `->forSubject($model)` and
+`->forOrganisation($organisationUuid)` bind ids as strings. `forOrganisation`
+never returns rows without an organisation: those are for the instance
+super-admin, through an unscoped query the product guards.
+
 ## Deprecation policy
 
 This package follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) (SemVer):

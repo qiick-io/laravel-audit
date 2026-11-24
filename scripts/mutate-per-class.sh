@@ -13,6 +13,10 @@ cd "$ROOT"
 
 # Every class with behaviour is a target; populated as feature PRs land.
 CLASSES=(
+  'Qiick\Audit\Concerns\LogsActivity'
+  'Qiick\Audit\Relations\StringKeyedMorphMany'
+  'Qiick\Audit\Support\ActivityLogger'
+  'Qiick\Audit\Support\SecretAttributeFloor'
   'Qiick\Audit\Actions\LogActivityAction'
   'Qiick\Audit\Laravel\AuditServiceProvider'
   'Qiick\Audit\Models\Activity'
