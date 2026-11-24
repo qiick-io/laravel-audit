@@ -12,8 +12,9 @@ use Qiick\Audit\Models\Activity;
 
 /**
  * Deletes activity rows past their retention floor (Luca, 2026-11-23, design
- * §10): rows outside the security log after `audit.retention_days` (365),
- * security log rows after `audit.security_retention_days` (730).
+ * §10): rows outside the security logs after `audit.retention_days` (365),
+ * rows of the security logs (`audit.security_log_names`: auth, security,
+ * access, api-keys) after `audit.security_retention_days` (730).
  *
  * Every deleting path goes through here (audit:purge and Spatie's
  * activitylog:clean, through the package's clean action), so no path deletes
@@ -29,7 +30,8 @@ final readonly class RetentionPurger
     private function __construct(
         public int $retentionDays,
         public int $securityRetentionDays,
-        public string $securityLogName,
+        /** @var non-empty-list<string> lower-cased */
+        public array $securityLogNames,
         private int $chunkSize,
     ) {}
 
@@ -42,22 +44,51 @@ final readonly class RetentionPurger
         $retentionDays = self::positiveInteger($config->get('audit.retention_days'), 'audit.retention_days must be a positive number of days.');
         $securityRetentionDays = self::positiveInteger($config->get('audit.security_retention_days'), 'audit.security_retention_days must be a positive number of days.');
         $chunkSize = self::positiveInteger($config->get('audit.purge.chunk_size'), 'audit.purge.chunk_size must be a positive integer.');
-        $securityLogName = $config->get('audit.security_log_name');
+        $securityLogNames = self::logNames($config->get('audit.security_log_names'));
 
         if ($securityRetentionDays < $retentionDays) {
             throw new InvalidArgumentException('audit.security_retention_days must not be shorter than audit.retention_days.');
         }
 
-        if (! is_string($securityLogName) || $securityLogName === '') {
-            throw new InvalidArgumentException('audit.security_log_name must name a log.');
+        return new self($retentionDays, $securityRetentionDays, $securityLogNames, $chunkSize);
+    }
+
+    /**
+     * A log name as the package stores it (LogActivityAction): trimmed and
+     * lower-cased, so `Auth` and `auth` are one log on every engine.
+     */
+    public static function normaliseLogName(string $logName): string
+    {
+        return strtolower(trim($logName));
+    }
+
+    /**
+     * @return non-empty-list<string>
+     */
+    private static function logNames(mixed $configuredNames): array
+    {
+        $message = 'audit.security_log_names must be a non-empty list of log names.';
+
+        if (! is_array($configuredNames) || $configuredNames === []) {
+            throw new InvalidArgumentException($message);
         }
 
-        return new self($retentionDays, $securityRetentionDays, $securityLogName, $chunkSize);
+        $logNames = [];
+
+        foreach ($configuredNames as $configuredName) {
+            if (! is_string($configuredName) || self::normaliseLogName($configuredName) === '') {
+                throw new InvalidArgumentException($message);
+            }
+
+            $logNames[] = self::normaliseLogName($configuredName);
+        }
+
+        return $logNames;
     }
 
     /**
      * @param  int  $minimumAgeInDays  a caller's own cutoff, never below the floors
-     * @param  string|null  $onlyLogName  restrict the purge to one log
+     * @param  string|null  $onlyLogName  restrict the purge to one log (any case)
      * @return array{general: int, security: int} the rows deleted by each pass
      */
     public function purge(int $minimumAgeInDays, ?string $onlyLogName = null): array
@@ -65,18 +96,21 @@ final readonly class RetentionPurger
         $now = Carbon::now('UTC');
         $deletedRows = ['general' => 0, 'security' => 0];
 
-        if ($onlyLogName !== $this->securityLogName) {
+        $onlyLogName = $onlyLogName === null ? null : self::normaliseLogName($onlyLogName);
+        $isSecurityLog = in_array($onlyLogName, $this->securityLogNames, true);
+
+        if (! $isSecurityLog) {
             $deletedRows['general'] = $this->deleteOlderThan(
                 fn (Builder $query) => $onlyLogName === null
-                    ? $query->where(fn (Builder $logQuery) => $logQuery->whereNull('log_name')->orWhere('log_name', '<>', $this->securityLogName))
+                    ? $query->where(fn (Builder $logQuery) => $logQuery->whereNull('log_name')->orWhereNotIn('log_name', $this->securityLogNames))
                     : $query->where('log_name', $onlyLogName),
                 $now->copy()->subDays(max($minimumAgeInDays, $this->retentionDays)),
             );
         }
 
-        if ($onlyLogName === null || $onlyLogName === $this->securityLogName) {
+        if ($onlyLogName === null || $isSecurityLog) {
             $deletedRows['security'] = $this->deleteOlderThan(
-                fn (Builder $query) => $query->where('log_name', $this->securityLogName),
+                fn (Builder $query) => $query->whereIn('log_name', $onlyLogName === null ? $this->securityLogNames : [$onlyLogName]),
                 $now->copy()->subDays(max($minimumAgeInDays, $this->securityRetentionDays)),
             );
         }

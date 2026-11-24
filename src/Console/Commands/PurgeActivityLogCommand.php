@@ -13,16 +13,16 @@ use Qiick\Audit\Support\RetentionPurger;
  * The retention purge (Luca, 2026-11-23, design §10), scheduled daily by the
  * provider: two passes on `created_at`, so the two floors can never be
  * conflated (RetentionPurger):
- * 1. rows outside the security log (`log_name IS NULL OR log_name <> 'auth'`)
- *    older than `audit.retention_days` (365);
- * 2. rows of the security log older than `audit.security_retention_days`
+ * 1. rows outside the security logs (`log_name IS NULL OR log_name NOT IN
+ *    audit.security_log_names`) older than `audit.retention_days` (365);
+ * 2. rows of the security logs older than `audit.security_retention_days`
  *    (730).
  */
 final class PurgeActivityLogCommand extends Command
 {
     protected $signature = 'audit:purge';
 
-    protected $description = 'Delete activity rows past their retention: 365 days, 730 for the security log';
+    protected $description = 'Delete activity rows past their retention: 365 days, 730 for the security logs';
 
     public function handle(ConfigRepository $config): int
     {
@@ -38,7 +38,9 @@ final class PurgeActivityLogCommand extends Command
         // to its own floor.
         $deletedRows = $purger->purge($purger->retentionDays);
 
-        $this->info("Purged {$deletedRows['general']} rows older than {$purger->retentionDays} days and {$deletedRows['security']} {$purger->securityLogName} rows older than {$purger->securityRetentionDays} days.");
+        $securityLogs = implode(', ', $purger->securityLogNames);
+
+        $this->info("Purged {$deletedRows['general']} rows older than {$purger->retentionDays} days and {$deletedRows['security']} security log rows ({$securityLogs}) older than {$purger->securityRetentionDays} days.");
 
         return self::SUCCESS;
     }

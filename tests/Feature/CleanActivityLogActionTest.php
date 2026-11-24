@@ -106,3 +106,14 @@ it('deletes nothing when the retention config is invalid', function (): void {
         ->toThrow(InvalidArgumentException::class, 'audit.security_retention_days must not be shorter than audit.retention_days.')
         ->and(rowsLeft())->toBe([$row]);
 });
+
+it('cleans a named security log with the security floor', function (): void {
+    $apiKeys400 = insertCleanRow('api-keys', 400);
+    insertCleanRow('api-keys', 800);
+
+    $this->artisan('activitylog:clean', ['log' => 'API-Keys', '--days' => 1, '--force' => true])
+        ->expectsOutputToContain('Deleted 1 record(s) from the activity log.')
+        ->assertSuccessful();
+
+    expect(rowsLeft())->toBe([$apiKeys400]);
+});

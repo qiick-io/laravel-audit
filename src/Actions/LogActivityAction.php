@@ -10,6 +10,7 @@ use Illuminate\Support\Str;
 use LogicException;
 use Qiick\Audit\Models\Activity;
 use Qiick\Audit\Support\ActivityAttributor;
+use Qiick\Audit\Support\RetentionPurger;
 use Qiick\Audit\Support\SecretAttributeFloor;
 use Spatie\Activitylog\Actions\LogActivityAction as SpatieLogActivityAction;
 
@@ -45,6 +46,13 @@ class LogActivityAction extends SpatieLogActivityAction
         $activity->setAttribute('public_id', null);
         $activity->setUniqueIds();
         $activity->setAttribute('schema_version', Activity::currentSchemaVersion());
+
+        // One spelling per log, so the retention floors match on every engine.
+        $logName = $activity->getAttribute('log_name');
+
+        if (is_string($logName)) {
+            $activity->setAttribute('log_name', RetentionPurger::normaliseLogName($logName));
+        }
         $this->redactSecretChanges($activity);
 
         parent::save($activity);
