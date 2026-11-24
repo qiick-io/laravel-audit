@@ -297,8 +297,13 @@ final class SecretAttributeFloor
         ], true);
     }
 
-    /** Lower case, without `_`, `-`, `.`, spaces, tabs and line breaks. */
-    private static function normalise(string $name): string
+    /**
+     * A name in the form every spelling of it shares: lower case, without
+     * `_`, `-`, `.`, spaces, tabs and line breaks (`firstName`, `first-name`
+     * and `first_name` are `firstname`). The anonymiser matches personal keys
+     * the same way.
+     */
+    public static function normalise(string $name): string
     {
         return strtolower(str_replace(['_', '-', '.', ' ', "\t", "\n"], '', $name));
     }

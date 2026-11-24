@@ -359,3 +359,34 @@ it('refuses a personal_keys config that is not a list of names', function (mixed
 
     expect(fn () => anonymise($person))->toThrow(InvalidArgumentException::class, 'audit.personal_keys must be a list of property keys.');
 })->with(['null' => [null], 'string' => ['phone'], 'nested' => [[['phone']]]]);
+
+it('scrubs personal keys in any spelling (review AU-j)', function (): void {
+    config()->set('audit.personal_keys', ['phone_number']);
+    $person = personToErase();
+    $activity = logAbout($person, null, 'profile', [
+        'firstName' => 'Ada',
+        'LastName' => 'Lovelace',
+        'last-name' => 'Lovelace',
+        'phoneNumber' => 'n/a',
+        'Phone Number' => 'n/a',
+        'user_Agent' => 'Browser',
+        'IP' => 'n/a',
+        'e-mail' => 'none',
+        'nested' => ['first.name' => 'Ada', 'kept' => 'value'],
+    ]);
+
+    anonymise($person);
+
+    expect(Activity::query()->findOrFail($activity->getKey())->properties?->toArray())->toEqual([
+        'firstName' => TOMBSTONE,
+        'LastName' => TOMBSTONE,
+        'last-name' => TOMBSTONE,
+        'phoneNumber' => TOMBSTONE,
+        'Phone Number' => TOMBSTONE,
+        'user_Agent' => TOMBSTONE,
+        'IP' => TOMBSTONE,
+        'e-mail' => TOMBSTONE,
+        'nested' => ['first.name' => TOMBSTONE, 'kept' => 'value'],
+        'actor_kind' => 'unattended',
+    ]);
+});

@@ -13,6 +13,7 @@ use Qiick\Audit\Contracts\AuditAnonymiser;
 use Qiick\Audit\Contracts\ErasureSubject;
 use Qiick\Audit\Events\ActivityAnonymised;
 use Qiick\Audit\Models\Activity;
+use Qiick\Audit\Support\SecretAttributeFloor;
 use RuntimeException;
 use stdClass;
 use UnexpectedValueException;
@@ -23,7 +24,8 @@ use UnexpectedValueException;
  * For every row whose causer or subject is one of the subject's morph refs
  * (compared through the stored morph type, so a morph map is honoured, A7):
  * - every personal key in `properties` and `attribute_changes`, at any depth
- *   and in any letter case, gets the tombstone: ip, user_agent, email,
+ *   and in any spelling (`firstName`, `last-name`, `Phone Number`, compared
+ *   like the secret floor), gets the tombstone: ip, user_agent, email,
  *   username, name, first_name, last_name and `audit.personal_keys`;
  * - every string, in those JSON columns and in `description`, has the
  *   subject's identifiers replaced by the tombstone, then every email
@@ -102,7 +104,7 @@ final class ActivityAnonymiser implements AuditAnonymiser
     }
 
     /**
-     * @param  list<string>  $personalKeys  lower-cased
+     * @param  list<string>  $personalKeys  normalised (SecretAttributeFloor::normalise())
      * @param  list<string>  $identifiers  longest first
      */
     private function anonymiseRow(stdClass $row, Activity $activityModel, Connection $connection, string $tombstone, array $personalKeys, array $identifiers): bool
@@ -157,7 +159,7 @@ final class ActivityAnonymiser implements AuditAnonymiser
         $scrubbed = [];
 
         foreach ($value as $key => $nestedValue) {
-            $scrubbed[$key] = is_string($key) && in_array(strtolower($key), $personalKeys, true)
+            $scrubbed[$key] = is_string($key) && in_array(SecretAttributeFloor::normalise($key), $personalKeys, true)
                 ? $tombstone
                 : $this->scrubValue($nestedValue, $personalKeys, $identifiers, $tombstone);
         }
@@ -197,7 +199,7 @@ final class ActivityAnonymiser implements AuditAnonymiser
     }
 
     /**
-     * @return list<string> lower-cased
+     * @return list<string> normalised
      */
     private function personalKeys(): array
     {
@@ -207,14 +209,14 @@ final class ActivityAnonymiser implements AuditAnonymiser
             throw new InvalidArgumentException('audit.personal_keys must be a list of property keys.');
         }
 
-        $personalKeys = self::builtInPersonalKeys();
+        $personalKeys = array_map(SecretAttributeFloor::normalise(...), self::builtInPersonalKeys());
 
         foreach ($configuredKeys as $configuredKey) {
             if (! is_string($configuredKey)) {
                 throw new InvalidArgumentException('audit.personal_keys must be a list of property keys.');
             }
 
-            $personalKeys[] = strtolower($configuredKey);
+            $personalKeys[] = SecretAttributeFloor::normalise($configuredKey);
         }
 
         return $personalKeys;

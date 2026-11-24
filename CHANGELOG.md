@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Erasure matches personal keys in any spelling (`firstName`, `last-name`,
+  `Phone Number`), normalised like the secret floor (analysis AU-j).
 - GDPR erasure (design §5): `Contracts\AuditAnonymiser` with `ErasureSubject`,
   `MorphRef` and `AnonymisationReport`, and the default
   `Anonymisation\ActivityAnonymiser`. For every row whose causer or subject
