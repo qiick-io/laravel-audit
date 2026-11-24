@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Illuminate\Database\Eloquent\Collection;
 use Qiick\Audit\Support\SecretAttributeFloor;
 use Qiick\Audit\Tests\Support\Models\AuditedAccount;
 use Qiick\Audit\Tests\Support\Models\SecretCastsRecord;
@@ -89,4 +90,44 @@ it('refuses a config that is not a list of names', function (mixed $configured):
 it('refuses an attribute that is not named by a string', function (): void {
     expect(fn () => secretFloor()->withoutSecrets(new AuditedAccount, ['name', 42]))
         ->toThrow(InvalidArgumentException::class, 'An attribute to log must be named by a string.');
+});
+
+it('treats a name that resolves to a relation as secret', function (string $attributePath): void {
+    expect(secretFloor()->isSecret(new AuditedAccount, $attributePath))->toBeTrue();
+})->with(['owner', 'parentAccount', 'parent_account', 'parentAccount.owner']);
+
+it('does not call a method without a Relation return type to find out', function (): void {
+    expect(secretFloor()->isSecret(new SecretCastsRecord, 'notARelation'))->toBeFalse()
+        ->and(secretFloor()->isSecret(new SecretCastsRecord, 'untypedMethod'))->toBeFalse()
+        ->and(SecretCastsRecord::$untypedMethodCalls)->toBe(0);
+});
+
+it('drops values that hold models and floor keys at any depth', function (): void {
+    $model = new AuditedAccount;
+    $changes = [
+        'name' => 'kept',
+        'owner' => $model,
+        'children' => new Collection([$model]),
+        'wrapped' => ['deep' => [$model]],
+        'count' => 3,
+        'settings' => ['Secret' => 'x', 'keep' => ['password' => 'y', 'ok' => 1], 7 => 'numeric key'],
+        'collection' => collect(['token_hash' => 'z', 'label' => 'l']),
+        'value_object' => new ArrayObject(['private_key' => 'k', 'size' => 2]),
+        'json_object' => new class implements JsonSerializable
+        {
+            public function jsonSerialize(): array
+            {
+                return ['remember_token' => 'r', 'theme' => 'dark'];
+            }
+        },
+    ];
+
+    expect(secretFloor()->withoutSecretValues($changes))->toBe([
+        'name' => 'kept',
+        'count' => 3,
+        'settings' => ['keep' => ['ok' => 1], 7 => 'numeric key'],
+        'collection' => ['label' => 'l'],
+        'value_object' => ['size' => 2],
+        'json_object' => ['theme' => 'dark'],
+    ]);
 });

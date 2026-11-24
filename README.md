@@ -77,11 +77,13 @@ columns, so Spatie keeps working):
 | `attribute_changes`, `properties` | json | Spatie v5 |
 | `schema_version` | unsigned small int, default `1` | row format: `1` current, `0` legacy externa row |
 | `request_id` | `string(64)`, indexed | correlation with application logs |
-| `anonymised_at` | timestamp | set by the anonymiser |
-| `created_at`, `updated_at` | timestamp, `created_at` indexed | UTC |
+| `anonymised_at` | datetime | set by the anonymiser |
+| `created_at`, `updated_at` | datetime (never MySQL `TIMESTAMP`, which ends in 2038); `created_at` NOT NULL, indexed | UTC |
 
 There are no foreign keys: activity morphs never cascade, and audit rows are
-anonymised, never deleted on erasure. The package sets
+anonymised, never deleted on erasure. In production the migration's `down()`
+refuses to drop a table that has rows; `migrate:fresh` and `db:wipe` drop
+tables without `down()`, so never run them against a production database. The package sets
 `activitylog.activity_model` to `Qiick\Audit\Models\Activity` and
 `activitylog.actions.log_activity` to `Qiick\Audit\Actions\LogActivityAction`
 unless the product configured subclasses of its own.
@@ -98,8 +100,7 @@ final class Project extends Model
     // Optional: a log name or extra excludes. The secret floor still applies.
     public function getActivitylogOptions(): LogOptions
     {
-        return LogOptions::defaults()->logAll()->logOnlyDirty()
-            ->dontLogEmptyChanges()->useLogName('projects')->logExcept(['notes']);
+        return $this->auditActivityLogOptions()->useLogName('projects')->logExcept(['notes']);
     }
 }
 ```
@@ -108,14 +109,22 @@ The trait never logs an attribute cast as `encrypted*` or `hashed`, or named in
 `audit.sensitive_attributes` (case-insensitive), whether the model logs it by
 name, by JSON path (`settings->secret`) or through a relation
 (`owner.password`). A relation path whose segment is not a relation method is
-dropped.
+dropped. A relation logged by name (`owner`, `owner.owner`) is dropped whole,
+and a JSON value logged whole loses every floor key at any depth. Description
+placeholders (`:subject.api_token`) for a secret or a non-scalar value stay as
+written.
+
+Audit rows are written once: the model refuses `save()` on a stored row and
+`delete()`, and the package columns are not mass-assignable.
 
 ## Querying
 
 `Activity::query()->causedBy($user)`, `->forSubject($model)` and
 `->forOrganisation($organisationUuid)` bind ids as strings. `forOrganisation`
 never returns rows without an organisation: those are for the instance
-super-admin, through an unscoped query the product guards.
+super-admin, through an unscoped query the product guards. `causedBy`,
+`forSubject` and `activitiesAsSubject()` do not filter by organisation: a
+tenant page always adds `forOrganisation()`.
 
 ## Deprecation policy
 

@@ -8,6 +8,8 @@ use Illuminate\Support\Facades\Schema;
 use Qiick\Audit\Models\Activity;
 use Qiick\Audit\Tests\Support\CreatesKeyedRecordTables;
 use Qiick\Audit\Tests\Support\Models\AuditedAccount;
+use Qiick\Audit\Tests\Support\Models\AuditedAccountLoggingPaths;
+use Qiick\Audit\Tests\Support\Models\AuditedAccountWithJson;
 use Qiick\Audit\Tests\Support\Models\AuditedAccountWithOptions;
 use Qiick\Audit\Tests\Support\Models\AuditedAccountWithOwner;
 use Qiick\Audit\Tests\Support\Models\IntegerKeyedRecord;
@@ -41,6 +43,8 @@ beforeEach(function (): void {
         $table->text('recovery_settings')->nullable();
         $table->string('pin')->nullable();
         $table->text('settings')->nullable();
+        $table->text('options')->nullable();
+        $table->text('flags')->nullable();
         $table->timestamps();
     });
 });
@@ -199,4 +203,74 @@ it('logs an ordinary relation attribute', function (): void {
     AuditedAccountWithOwner::query()->create(['name' => 'Linked', 'owner_id' => $owner->getKey()]);
 
     expect(loggedAttributeChanges('created')['attributes'])->toBe(['name' => 'Linked', 'owner.name' => 'Owner']);
+});
+
+it('never logs a related model named as an attribute, nor its decrypted secrets (A1, review B1)', function (string $attributePath): void {
+    $owner = createAuditedAccount();
+
+    AuditedAccountLoggingPaths::$paths = ['name', $attributePath];
+    $child = AuditedAccountLoggingPaths::query()->create(['name' => 'Child', 'parent_account_id' => $owner->getKey()]);
+
+    $changes = Activity::query()->forSubject($child)->sole()->attribute_changes?->toArray() ?? [];
+
+    expect($changes['attributes'])->toBe(['name' => 'Child']);
+    expectNoSecretValueIn($changes);
+})->with(['parentAccount', 'parent_account', 'parentAccount.parentAccount']);
+
+it('drops secret keys nested at any depth in a JSON column (A1, review B2)', function (): void {
+    $account = AuditedAccountWithJson::query()->create([
+        'name' => 'Json',
+        'settings' => ['theme' => 'dark', 'Password' => 'hunter2', 'nested' => ['secret' => 'shared-secret', 'list' => [['private_key' => '-----BEGIN KEY-----', 'label' => 'kept']]]],
+    ]);
+
+    $created = loggedAttributeChanges('created');
+
+    expect($created['attributes']['settings'])->toBe(['theme' => 'dark', 'nested' => ['list' => [['label' => 'kept']]]]);
+    expectNoSecretValueIn($created);
+
+    $account->update(['settings' => ['theme' => 'light', 'token_hash' => 'remember-me']]);
+    $updated = loggedAttributeChanges('updated');
+
+    expect($updated['attributes']['settings'])->toBe(['theme' => 'light'])
+        ->and($updated['old']['settings'])->toBe(['theme' => 'dark', 'nested' => ['list' => [['label' => 'kept']]]]);
+    expectNoSecretValueIn($updated);
+
+    $account->delete();
+
+    expectNoSecretValueIn(loggedAttributeChanges('deleted'));
+});
+
+it('drops secret keys from collection and array object casts (A1)', function (): void {
+    AuditedAccountWithJson::query()->create([
+        'name' => 'Objects',
+        'options' => ['secret' => 'shared-secret', 'mode' => 'fast'],
+        'flags' => ['two_factor_secret' => 'remember-me', 'beta' => true],
+    ]);
+
+    $changes = loggedAttributeChanges('created');
+
+    expect($changes['attributes']['options'])->toBe(['mode' => 'fast'])
+        ->and($changes['attributes']['flags'])->toBe(['beta' => true]);
+    expectNoSecretValueIn($changes);
+});
+
+it('leaves description placeholders for secrets and related models unresolved (A1)', function (): void {
+    $account = createAuditedAccount();
+
+    activity()->performedOn($account)->causedBy($account)
+        ->log('renamed :subject.name with :subject.api_token, :causer.PASSWORD, :subject.parentAccount, :subject.recovery_settings and :subject');
+
+    $description = Activity::query()->latest('id')->firstOrFail()->description;
+
+    expect($description)->toBe('renamed Ada with :subject.api_token, :causer.PASSWORD, :subject.parentAccount, :subject.recovery_settings and :subject');
+});
+
+it('still resolves ordinary placeholders, properties included', function (): void {
+    $account = createAuditedAccount();
+
+    activity()->performedOn($account)->causedBy($account)->withProperties(['reason' => 'audit', 'secret' => 'x', 'count' => 3])
+        ->log(':subject.email changed by :causer.name for :properties.reason x:properties.count (:properties.secret, :event.x, :description)');
+
+    expect(Activity::query()->latest('id')->firstOrFail()->description)
+        ->toBe('ada@example.com changed by Ada for audit x3 (:properties.secret, :event.x, :description)');
 });

@@ -51,6 +51,31 @@ class Activity extends SpatieActivity
     }
 
     /**
+     * The package's columns are written by the package (the logging action,
+     * the attributor, the anonymiser), never by mass assignment.
+     *
+     * @return array<string>
+     */
+    public function getGuarded(): array
+    {
+        return [...parent::getGuarded(), 'id', 'public_id', 'organisation_id', 'schema_version', 'request_id', 'anonymised_at'];
+    }
+
+    /**
+     * An audit row is written once. Only the anonymiser and the retention
+     * purge change rows, through the query builder; the model refuses.
+     */
+    protected static function booted(): void
+    {
+        $refuseChange = static function (): never {
+            throw new LogicException('Activity rows are written once: only the anonymiser and the retention purge change them.');
+        };
+
+        static::updating($refuseChange);
+        static::deleting($refuseChange);
+    }
+
+    /**
      * Only public_id is generated: the primary key stays an auto-increment.
      *
      * @return list<string>

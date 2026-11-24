@@ -39,3 +39,13 @@ it('writes the current schema_version over a caller value and the column default
 
     expect(Activity::query()->sole()->schema_version)->toBe(1);
 });
+
+it('replaces a public_id the caller set', function (): void {
+    config()->set('activitylog.buffer.enabled', false);
+
+    activity()->tap(function (Activity $activity): void {
+        $activity->public_id = '0193a3b0-7c1d-7000-8000-00000000beef';
+    })->log('forged id');
+
+    expect(Activity::query()->sole()->public_id)->not->toBe('0193a3b0-7c1d-7000-8000-00000000beef');
+});

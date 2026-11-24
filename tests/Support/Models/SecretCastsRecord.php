@@ -11,6 +11,15 @@ use Illuminate\Database\Eloquent\Model;
 /** Every secret cast Laravel offers, next to ordinary ones. */
 final class SecretCastsRecord extends Model
 {
+    public static int $untypedMethodCalls = 0;
+
+    public function untypedMethod()
+    {
+        self::$untypedMethodCalls++;
+
+        return null;
+    }
+
     public function notARelation(): string
     {
         return 'not a relation';

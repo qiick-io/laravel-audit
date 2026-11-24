@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -14,7 +15,9 @@ use Illuminate\Support\Facades\Schema;
  * - public_id (UUID v7), the only id that leaves the database;
  * - organisation_id as uuid, joinable with a uuid organisation key on PostgreSQL;
  * - schema_version (1 = current row format, 0 = legacy externa row);
- * - request_id for correlation and anonymised_at for provable erasure.
+ * - request_id for correlation and anonymised_at for provable erasure;
+ * - DATETIME columns, never MySQL TIMESTAMP (which ends on 2038-01-19), and
+ *   a created_at that is always set, so the retention purge sees every row.
  *
  * No foreign keys: activity morphs never cascade, and audit rows are
  * anonymised, never deleted or hidden. Editable here until 1.0.0.
@@ -40,14 +43,24 @@ return new class extends Migration
             $table->json('properties')->nullable();
             $table->unsignedSmallInteger('schema_version')->default(1);
             $table->string('request_id', 64)->nullable()->index();
-            $table->timestamp('anonymised_at')->nullable();
-            $table->timestamps();
-            $table->index('created_at');
+            $table->dateTime('anonymised_at')->nullable();
+            $table->dateTime('created_at')->useCurrent()->index();
+            $table->dateTime('updated_at')->nullable();
         });
     }
 
+    /**
+     * Dropping the table deletes the audit evidence, so in production it is
+     * refused while the table has rows. Laravel's migrate:fresh and
+     * db:wipe drop tables without calling down(): never run them against a
+     * production database.
+     */
     public function down(): void
     {
+        if (app()->isProduction() && Schema::hasTable('activity_log') && DB::table('activity_log')->exists()) {
+            throw new RuntimeException('activity_log has rows: rolling back its migration in production would delete audit evidence.');
+        }
+
         Schema::dropIfExists('activity_log');
     }
 };

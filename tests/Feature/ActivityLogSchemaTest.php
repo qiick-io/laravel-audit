@@ -54,13 +54,13 @@ it('has exactly the design columns', function (): void {
     ]);
 });
 
-it('makes only id, public_id, description and schema_version not nullable', function (): void {
+it('makes only id, public_id, description, schema_version and created_at not nullable', function (): void {
     $notNullable = collect(activityLogColumns())
         ->reject(fn (array $column): bool => $column['nullable'])
         ->keys()
         ->all();
 
-    expect($notNullable)->toEqualCanonicalizing(['id', 'public_id', 'description', 'schema_version']);
+    expect($notNullable)->toEqualCanonicalizing(['id', 'public_id', 'description', 'schema_version', 'created_at']);
 });
 
 it('stores morph ids as strings of 64 characters for bigint, uuid and ulid keys', function (): void {
@@ -151,6 +151,51 @@ it('refuses a duplicate public_id', function (): void {
 
 it('has no foreign keys, so activity morphs never cascade', function (): void {
     expect(Schema::getForeignKeys('activity_log'))->toBe([]);
+});
+
+it('stores the timestamps as DATETIME, never a MySQL TIMESTAMP that ends in 2038', function (): void {
+    $columns = activityLogColumns();
+
+    foreach (['created_at', 'updated_at', 'anonymised_at'] as $columnName) {
+        expect($columns[$columnName]['type_name'])->toBeIn(['datetime', 'timestamp']);
+
+        if (in_array(DB::getDriverName(), ['mysql', 'mariadb'], true)) {
+            expect($columns[$columnName]['type_name'])->toBe('datetime');
+        }
+    }
+
+    DB::table('activity_log')->insert([
+        'public_id' => (string) Str::uuid7(),
+        'description' => 'far future',
+        'created_at' => '2040-06-01 12:00:00',
+    ]);
+
+    expect((string) DB::table('activity_log')->value('created_at'))->toStartWith('2040-06-01 12:00:00');
+});
+
+it('fills created_at when an insert leaves it out', function (): void {
+    DB::table('activity_log')->insert(['public_id' => (string) Str::uuid7(), 'description' => 'no timestamp']);
+
+    expect(DB::table('activity_log')->value('created_at'))->not->toBeNull();
+});
+
+it('refuses to roll back over audit rows in production', function (): void {
+    DB::table('activity_log')->insert(['public_id' => (string) Str::uuid7(), 'description' => 'evidence']);
+    app()->detectEnvironment(fn (): string => 'production');
+
+    $migration = require dirname(__DIR__, 2).'/database/migrations/2026_11_24_000000_create_activity_log_table.php';
+
+    expect(fn () => $migration->down())
+        ->toThrow(RuntimeException::class, 'activity_log has rows: rolling back its migration in production would delete audit evidence.')
+        ->and(Schema::hasTable('activity_log'))->toBeTrue();
+
+    DB::table('activity_log')->delete();
+    $migration->down();
+
+    expect(Schema::hasTable('activity_log'))->toBeFalse();
+
+    app()->detectEnvironment(fn (): string => 'testing');
+    $migration->up();
 });
 
 it('drops the table on rollback', function (): void {

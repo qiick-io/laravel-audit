@@ -10,6 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Review of #2/#3: relations logged by name and models nested in a value are
+  dropped, floor keys nested in JSON values are removed at any depth, and
+  description placeholders never resolve a secret or a non-scalar. The
+  activity_log timestamps are DATETIME (no 2038 limit) with a NOT NULL
+  `created_at`, `down()` refuses to drop rows in production, and audit rows
+  are written once (no model update or delete, package columns guarded, a
+  caller's `public_id` replaced). `auditActivityLogOptions()` returns the
+  trait defaults for models that add a log name or excludes.
 - `Concerns\LogsActivity` (replaces each product's `LogsApplicationActivityTrait`):
   Spatie's trait with the fleet defaults (every dirty attribute, no empty
   changes, the `default` log) and a secret floor that drops every

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Qiick\Audit\Concerns;
 
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Qiick\Audit\Models\Activity;
 use Qiick\Audit\Relations\StringKeyedMorphMany;
@@ -30,6 +31,19 @@ trait LogsActivity
 {
     use SpatieLogsActivity {
         attributesToBeLogged as spatieAttributesToBeLogged;
+        extractChanges as spatieExtractChanges;
+    }
+
+    /**
+     * Spatie's resolved values for create, update (new and old) and delete,
+     * without related models and without floor keys nested in JSON values.
+     *
+     * @return array<array-key, mixed>
+     */
+    public static function extractChanges(Model $model): array
+    {
+        return SecretAttributeFloor::fromConfig(config('audit.sensitive_attributes'))
+            ->withoutSecretValues(static::spatieExtractChanges($model));
     }
 
     /**
@@ -55,6 +69,16 @@ trait LogsActivity
     }
 
     public function getActivitylogOptions(): LogOptions
+    {
+        return $this->auditActivityLogOptions();
+    }
+
+    /**
+     * The fleet defaults, for a model that overrides getActivitylogOptions()
+     * to add a log name or excludes:
+     * `return $this->auditActivityLogOptions()->logExcept(['notes']);`
+     */
+    protected function auditActivityLogOptions(): LogOptions
     {
         return LogOptions::defaults()
             ->logAll()
