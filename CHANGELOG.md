@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Erasure replaces identifiers as whole words only (`Al` no longer corrupts
+  `Alarm`) and scrubs `ip_address` by default.
 - Erasure matches personal keys in any spelling (`firstName`, `last-name`,
   `Phone Number`), normalised like the secret floor (analysis AU-j).
 - GDPR erasure (design §5): `Contracts\AuditAnonymiser` with `ErasureSubject`,

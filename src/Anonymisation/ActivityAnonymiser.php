@@ -25,11 +25,11 @@ use UnexpectedValueException;
  * (compared through the stored morph type, so a morph map is honoured, A7):
  * - every personal key in `properties` and `attribute_changes`, at any depth
  *   and in any spelling (`firstName`, `last-name`, `Phone Number`, compared
- *   like the secret floor), gets the tombstone: ip, user_agent, email,
- *   username, name, first_name, last_name and `audit.personal_keys`;
+ *   like the secret floor), gets the tombstone: ip, ip_address, user_agent,
+ *   email, username, name, first_name, last_name and `audit.personal_keys`;
  * - every string, in those JSON columns and in `description`, has the
- *   subject's identifiers replaced by the tombstone, then every email
- *   address and phone-like sequence (A14);
+ *   subject's identifiers replaced by the tombstone as whole words, then
+ *   every email address and phone-like sequence (A14);
  * - `anonymised_at` is set.
  *
  * It never deletes a row and never changes the event, the log, the
@@ -60,7 +60,7 @@ final class ActivityAnonymiser implements AuditAnonymiser
      */
     public static function builtInPersonalKeys(): array
     {
-        return ['ip', 'user_agent', 'email', 'username', 'name', 'first_name', 'last_name'];
+        return ['ip', 'ip_address', 'user_agent', 'email', 'username', 'name', 'first_name', 'last_name'];
     }
 
     public function anonymise(ErasureSubject $subject): AnonymisationReport
@@ -173,7 +173,8 @@ final class ActivityAnonymiser implements AuditAnonymiser
     private function scrubText(string $text, array $identifiers, string $tombstone): string
     {
         foreach ($identifiers as $identifier) {
-            $text = preg_replace('/'.preg_quote($identifier, '/').'/iu', $tombstone, $text)
+            // Whole words only: a short name (`Al`) must not corrupt `Alarm`.
+            $text = preg_replace('/(?<![\p{L}\p{N}])'.preg_quote($identifier, '/').'(?![\p{L}\p{N}])/iu', $tombstone, $text)
                 ?? throw new RuntimeException('An identifier could not be scrubbed.');
         }
 

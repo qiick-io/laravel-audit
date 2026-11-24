@@ -390,3 +390,42 @@ it('scrubs personal keys in any spelling (review AU-j)', function (): void {
         'actor_kind' => 'unattended',
     ]);
 });
+
+it('replaces an identifier only as a whole word (review)', function (): void {
+    $person = personToErase();
+    $activity = logAbout($person, null, 'Al and Al Bundy: Called Alessandro about the Alarm (Al)', [
+        'note' => 'Called Alessandro about Alarm; Al said so',
+        'display_name_label' => 'Al B',
+    ]);
+
+    app(AuditAnonymiser::class)->anonymise(new ErasureSubject([MorphRef::of($person)], TOMBSTONE, ['Al Bundy', 'Al']));
+
+    $anonymised = Activity::query()->findOrFail($activity->getKey());
+
+    expect($anonymised->description)->toBe(TOMBSTONE.' and '.TOMBSTONE.': Called Alessandro about the Alarm ('.TOMBSTONE.')')
+        ->and($anonymised->getProperty('note'))->toBe('Called Alessandro about Alarm; '.TOMBSTONE.' said so')
+        ->and($anonymised->getProperty('display_name_label'))->toBe(TOMBSTONE.' B');
+});
+
+it('replaces identifiers that start or end with a non-letter at their own edges', function (): void {
+    $person = personToErase();
+    $activity = logAbout($person, null, 'mail ada@example.com, handle @ada.l!, ada.lovelace stays');
+
+    app(AuditAnonymiser::class)->anonymise(new ErasureSubject([MorphRef::of($person)], TOMBSTONE, ['@ada.l', 'ADA@example.com']));
+
+    expect(Activity::query()->findOrFail($activity->getKey())->description)
+        ->toBe('mail '.TOMBSTONE.', handle '.TOMBSTONE.'!, ada.lovelace stays');
+});
+
+it('scrubs ip_address by default (review)', function (): void {
+    $person = personToErase();
+    $activity = logAbout($person, null, 'login', ['ip_address' => '2001:db8::1', 'ipAddress' => '2001:db8::2']);
+
+    anonymise($person);
+
+    expect(Activity::query()->findOrFail($activity->getKey())->properties?->toArray())->toEqual([
+        'ip_address' => TOMBSTONE,
+        'ipAddress' => TOMBSTONE,
+        'actor_kind' => 'unattended',
+    ]);
+});

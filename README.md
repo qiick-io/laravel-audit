@@ -205,7 +205,7 @@ $report = app(AuditAnonymiser::class)->anonymise(new ErasureSubject(
 ```
 
 Matching rows keep their event, log name, timestamps and morphs; their
-personal keys, the identifiers and any email address or phone-like sequence
+personal keys, the identifiers (as whole words) and any email address or phone-like sequence
 become the tombstone, and `anonymised_at` is set. A second run reports
 `0` rows. The tombstone must not contain an identifier or look like an email
 address or a phone number.
