@@ -121,7 +121,7 @@ final class RenamedMorphColumnsTest extends PackageTestCase
         config()->set('activitylog.activity_model', \Spatie\Activitylog\Models\Activity::class);
 
         $this->expectException(\LogicException::class);
-        $this->expectExceptionMessage('activitylog.activity_model must extend '.Activity::class.'.');
+        $this->expectExceptionMessage('The activity logger needs an activity model that extends '.Activity::class.'.');
 
         activity()->log('spatie model');
     }

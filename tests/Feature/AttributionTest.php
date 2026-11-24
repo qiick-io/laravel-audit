@@ -77,7 +77,7 @@ it('records the request ip, the user agent and the actor kind of a web request',
         ->post('/audit-test')
         ->assertNoContent();
 
-    expect(loggedProperties())->toBe([
+    expect(loggedProperties())->toEqual([
         'ip' => '203.0.113.9',
         'user_agent' => 'Browser/1.0',
         'actor_kind' => 'web_session',
@@ -107,7 +107,7 @@ it('cuts the user agent at 512 characters by default', function (): void {
 it('omits request data outside a request', function (): void {
     activity()->log('console');
 
-    expect(loggedProperties())->toBe(['actor_kind' => 'unattended']);
+    expect(loggedProperties())->toEqual(['actor_kind' => 'unattended']);
 });
 
 it('attributes a bound API key to its owner principal and the key (causer rule)', function (): void {
@@ -120,7 +120,7 @@ it('attributes a bound API key to its owner principal and the key (causer rule)'
     $activity = Activity::query()->sole();
 
     expect($activity->causer?->is($owner))->toBeTrue()
-        ->and(loggedProperties())->toBe([
+        ->and(loggedProperties())->toEqual([
             'actor_kind' => 'api_key',
             'api_key_id' => API_KEY_UUID,
             'api_key_prefix' => 'qk_live_ab12',
@@ -135,7 +135,7 @@ it('records the OAuth client of a bound grant', function (): void {
     activity()->log('grant action');
 
     expect(Activity::query()->sole()->causer?->is($owner))->toBeTrue()
-        ->and(loggedProperties())->toBe(['actor_kind' => 'oauth_grant', 'oauth_client_id' => OAUTH_CLIENT_UUID]);
+        ->and(loggedProperties())->toEqual(['actor_kind' => 'oauth_grant', 'oauth_client_id' => OAUTH_CLIENT_UUID]);
 });
 
 it('overrides a causer the caller chose when a credential acts', function (): void {
@@ -178,7 +178,7 @@ it('overwrites reserved keys a caller forged (A2)', function (): void {
         ->withHeader('User-Agent', 'Real/1.0')
         ->post('/audit-test');
 
-    expect(loggedProperties())->toBe([
+    expect(loggedProperties())->toEqual([
         'reason' => 'kept',
         'ip' => '203.0.113.9',
         'user_agent' => 'Real/1.0',
@@ -192,7 +192,7 @@ it('overwrites reserved keys a caller forged (A2)', function (): void {
 it('removes forged credential keys when no credential acts (A2)', function (): void {
     activity()->withProperties(['api_key_id' => API_KEY_UUID, 'ip' => '10.0.0.1', 'oauth_client_id' => OAUTH_CLIENT_UUID])->log('forged');
 
-    expect(loggedProperties())->toBe(['actor_kind' => 'unattended']);
+    expect(loggedProperties())->toEqual(['actor_kind' => 'unattended']);
 });
 
 it('wins over a product beforeLogging callback (A2)', function (): void {
@@ -202,7 +202,7 @@ it('wins over a product beforeLogging callback (A2)', function (): void {
 
     activity()->log('callback');
 
-    expect(loggedProperties())->toBe(['actor_kind' => 'unattended']);
+    expect(loggedProperties())->toEqual(['actor_kind' => 'unattended']);
 });
 
 it('never takes the organisation from properties (A3)', function (): void {
