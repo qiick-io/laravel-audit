@@ -187,6 +187,29 @@ the product's `OrganisationResolver` binding (default: none). `request_id`
 comes from the `request_id` key of Laravel's context, which
 `qiick/laravel-http-basics` sets.
 
+## Erasure (GDPR)
+
+The product's erasure job calls the anonymiser in the same transaction as the
+user tombstoning, or after it, never alone:
+
+```php
+use Qiick\Audit\Contracts\AuditAnonymiser;
+use Qiick\Audit\Contracts\ErasureSubject;
+use Qiick\Audit\Contracts\MorphRef;
+
+$report = app(AuditAnonymiser::class)->anonymise(new ErasureSubject(
+    refs: [MorphRef::of($user), MorphRef::of($principal)],  // every model that identifies the person
+    tombstone: $user->tombstone,                             // the product's unique tombstone
+    identifiers: [$email, $username, $displayName],          // scrubbed from free text
+));
+```
+
+Matching rows keep their event, log name, timestamps and morphs; their
+personal keys, the identifiers and any email address or phone-like sequence
+become the tombstone, and `anonymised_at` is set. A second run reports
+`0` rows. The tombstone must not contain an identifier or look like an email
+address or a phone number.
+
 ## Querying
 
 `Activity::query()->causedBy($user)`, `->forSubject($model)` and
