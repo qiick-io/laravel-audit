@@ -45,16 +45,6 @@ final class ActivityAttributor
         private readonly OrganisationResolver $organisationResolver,
     ) {}
 
-    /**
-     * The keys only the package writes (design §3.1).
-     *
-     * @return list<string>
-     */
-    public static function reservedPropertyKeys(): array
-    {
-        return ['ip', 'user_agent', 'actor_kind', 'api_key_id', 'api_key_prefix', 'api_key_created_by', 'oauth_client_id'];
-    }
-
     public function attribute(Activity $activity): void
     {
         $actor = $this->actorResolver->current();
@@ -77,7 +67,9 @@ final class ActivityAttributor
         $request = AuditContext::httpRequest();
         $userAgent = $request?->userAgent();
 
-        $serverValues = array_filter([
+        // Every reserved key (design §3.1) with the server's value, or null
+        // when the server has none: the key is removed either way.
+        $reservedValues = [
             'ip' => $request?->ip(),
             'user_agent' => $userAgent === null ? null : mb_substr($userAgent, 0, $this->userAgentMax()),
             'actor_kind' => $actor->actorKind,
@@ -85,11 +77,11 @@ final class ActivityAttributor
             'api_key_prefix' => $actor->apiKeyPrefix,
             'api_key_created_by' => $actor->apiKeyCreatedBy,
             'oauth_client_id' => $actor->oauthClientId,
-        ], fn (?string $value): bool => $value !== null);
+        ];
 
         return collect($properties ?? [])
-            ->except(self::reservedPropertyKeys())
-            ->merge($serverValues);
+            ->except(array_keys($reservedValues))
+            ->merge(array_filter($reservedValues, fn (?string $value): bool => $value !== null));
     }
 
     private function organisationId(Activity $activity): ?string
