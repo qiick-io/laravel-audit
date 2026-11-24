@@ -13,6 +13,9 @@ cd "$ROOT"
 
 # Every class with behaviour is a target; populated as feature PRs land.
 CLASSES=(
+  'Qiick\Audit\Actions\LogActivityAction'
+  'Qiick\Audit\Laravel\AuditServiceProvider'
+  'Qiick\Audit\Models\Activity'
 )
 
 MIN="${MUTATE_MIN:-95}"
