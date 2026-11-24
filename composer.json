@@ -58,7 +58,8 @@
     },
     "autoload-dev": {
         "psr-4": {
-            "Qiick\\Audit\\Tests\\": "tests/"
+            "Qiick\\Audit\\Tests\\": "tests/",
+            "Qiick\\Access\\": "tests/Fakes/Access/"
         }
     },
     "scripts": {

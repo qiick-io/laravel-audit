@@ -17,6 +17,13 @@ return [
     'namespace' => 'Qiick\Audit',
 
     'ignoring' => [
+        'Contracts' => [
+            // Design §4 names the public API without the Contract suffix, and
+            // AuditActor is a readonly value object, not an interface.
+            'Qiick\Audit\Contracts\AuditActor',
+            'Qiick\Audit\Contracts\AuditActorResolver',
+            'Qiick\Audit\Contracts\OrganisationResolver',
+        ],
         'traits' => [
             // Design §4: the trait is Qiick\Audit\Concerns\LogsActivity, the
             // name of the Spatie trait it replaces in every product model.

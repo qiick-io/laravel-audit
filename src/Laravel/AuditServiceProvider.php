@@ -4,9 +4,15 @@ declare(strict_types=1);
 
 namespace Qiick\Audit\Laravel;
 
+use Illuminate\Routing\Events\RouteMatched;
 use Illuminate\Support\ServiceProvider;
 use Qiick\Audit\Actions\LogActivityAction;
+use Qiick\Audit\AuditContext;
+use Qiick\Audit\Contracts\AuditActorResolver;
+use Qiick\Audit\Contracts\OrganisationResolver;
 use Qiick\Audit\Models\Activity;
+use Qiick\Audit\Resolvers\NullOrganisationResolver;
+use Qiick\Audit\Resolvers\RequestAttributeActorResolver;
 use Qiick\Audit\Support\ActivityLogger;
 use Spatie\Activitylog\Actions\LogActivityAction as SpatieLogActivityAction;
 use Spatie\Activitylog\Models\Activity as SpatieActivity;
@@ -28,6 +34,11 @@ final class AuditServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->mergeConfigFrom(__DIR__.'/../../config/audit.php', 'audit');
+
+        $this->app->scoped(AuditContext::class);
+        // bindIf: a product provider that bound its own resolver keeps it.
+        $this->app->bindIf(AuditActorResolver::class, RequestAttributeActorResolver::class);
+        $this->app->bindIf(OrganisationResolver::class, NullOrganisationResolver::class);
     }
 
     /**
@@ -58,6 +69,11 @@ final class AuditServiceProvider extends ServiceProvider
         // Spatie binds its logger in register(); binding at boot replaces it
         // whatever order the providers registered in.
         $this->app->bind(SpatieActivityLogger::class, ActivityLogger::class);
+
+        $this->app->make('events')->listen(
+            RouteMatched::class,
+            fn (RouteMatched $routeMatched) => AuditContext::rememberHttpRequest($routeMatched->request),
+        );
 
         $this->publishes([
             __DIR__.'/../../config/audit.php' => $this->app->configPath('audit.php'),

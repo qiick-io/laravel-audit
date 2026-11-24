@@ -10,6 +10,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Server-side attribution on every logged row (design §3.1, §4), written by
+  the package logging action after every product `beforeLogging` callback:
+  the reserved property keys `ip`, `user_agent` (cut to
+  `audit.user_agent_max`), `actor_kind`, `api_key_id`, `api_key_prefix`,
+  `api_key_created_by` and `oauth_client_id` (caller values removed, A2); the
+  causer rule (a bound credential's owner principal, the web session user,
+  an unattended job's own causer); `organisation_id` from
+  `Audit::inOrganisation()` or the `OrganisationResolver`, never from
+  properties (A3); `request_id` from the `request_id` key of Laravel's
+  context. The ip and user agent come only from a routed HTTP request.
+- Contracts `AuditActorResolver`, `AuditActor` (public UUIDs and public ids
+  only, A6) and `OrganisationResolver`; `AuditContext::bindCredential()` for
+  the key / OAuth middleware; defaults `RequestAttributeActorResolver` (reads
+  `qiick/laravel-access`'s actor context when it is installed) and
+  `NullOrganisationResolver`.
 - Schema (analysis of 2026-11-24): composite indexes
   `activity_log_organisation_created_at` and `activity_log_log_name_created_at`
   for the tenant page and the retention passes (they replace the single

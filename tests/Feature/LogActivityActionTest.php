@@ -24,10 +24,11 @@ it('fills public_id before the buffer takes the row', function (): void {
         ->and(app(ActivityBuffer::class)->count())->toBe(1);
 });
 
-it('leaves a model without unique ids to Spatie', function (): void {
-    app(LogActivityAction::class)->execute(new SpatieActivity, 'buffered');
+it('refuses an activity model that does not extend the package model', function (): void {
+    expect(fn () => app(LogActivityAction::class)->execute(new SpatieActivity, 'buffered'))
+        ->toThrow(LogicException::class, 'activitylog.activity_model must extend '.Activity::class.'.');
 
-    expect(app(ActivityBuffer::class)->count())->toBe(1);
+    expect(app(ActivityBuffer::class)->count())->toBe(0);
 });
 
 it('writes the current schema_version over a caller value and the column default', function (): void {

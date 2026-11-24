@@ -140,6 +140,44 @@ mistakes, not against product code: `Activity::query()->update()` and
 `->delete()` go through the query builder, which the anonymiser and the purge
 use, and the model cannot stop them. Never write to `activity_log` that way.
 
+## Attribution
+
+Every row the package logs carries server-side attribution, written after
+every `beforeLogging` callback, so a caller can never forge it:
+
+| `properties` key | Value |
+| --- | --- |
+| `ip`, `user_agent` | the routed HTTP request (user agent cut to `audit.user_agent_max`); absent in console commands and jobs |
+| `actor_kind` | `web_session`, `api_key`, `oauth_grant`, `public_api` or `unattended` |
+| `api_key_id`, `api_key_prefix`, `api_key_created_by` | the bound API key: public UUID, display prefix, creator's public id |
+| `oauth_client_id` | the bound OAuth grant's client UUID |
+
+A caller's value for any of these keys is removed. The key or OAuth middleware
+binds the credential once it is verified:
+
+```php
+use Qiick\Audit\AuditContext;
+use Qiick\Audit\Contracts\AuditActor;
+
+AuditContext::bindCredential(new AuditActor(
+    causer: $apiKey->ownerPrincipal,   // the credential's owner is the causer
+    actorKind: 'api_key',
+    apiKeyId: $apiKey->public_id,      // UUID, never the bigint
+    apiKeyPrefix: $apiKey->prefix,
+    apiKeyCreatedBy: $apiKey->creator->public_id,
+));
+```
+
+Products that wrote `api_key_id` through `Qiick\ApiKeys\Audit::withApiKeyId()`
+bind the credential instead: the reserved key is the server's.
+
+The organisation goes in the `organisation_id` column, never in
+`properties`: either explicitly,
+`activity()->tap(Audit::inOrganisation($organisationUuid))->log(...)`, or from
+the product's `OrganisationResolver` binding (default: none). `request_id`
+comes from the `request_id` key of Laravel's context, which
+`qiick/laravel-http-basics` sets.
+
 ## Querying
 
 `Activity::query()->causedBy($user)`, `->forSubject($model)` and
