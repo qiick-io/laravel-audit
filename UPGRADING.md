@@ -22,7 +22,9 @@ For excubia-app, signaculum-core and instituta-core (design §6.1). externa
    the package fills `activity_model` and `actions.log_activity`. A product
    model or action must extend `Qiick\Audit\Models\Activity` /
    `Qiick\Audit\Actions\LogActivityAction`, or boot fails.
-3. Replace `LogsApplicationActivityTrait` with `Qiick\Audit\Concerns\LogsActivity`.
+3. Replace `LogsApplicationActivityTrait` with `Qiick\Audit\Concerns\LogsActivity`,
+   and Spatie's `CausesActivity` / `HasActivity` with the package traits of
+   the same name.
    Per-model `logExcept()` lists of secrets can go: the floor covers
    `encrypted*` / `hashed` casts and `audit.sensitive_attributes`.
 4. Remove the `Activity::beforeLogging` blocks that add `ip`, `user_agent`,

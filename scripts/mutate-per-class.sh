@@ -12,8 +12,9 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 # Every class with behaviour is a target; populated as feature PRs land.
-# NullOrganisationResolver is not listed: it only returns null, so pest
-# creates no mutant for it.
+# Not listed because pest creates no mutant for them: NullOrganisationResolver
+# (returns null), Concerns\CausesActivity and Concerns\HasActivity (one-line
+# delegations to StringKeyedMorphMany and LogsActivity, which are listed).
 CLASSES=(
   'Qiick\Audit\Laravel\AuditBootChecks'
   'Qiick\Audit\Support\RetentionPurger'

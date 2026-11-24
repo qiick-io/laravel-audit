@@ -15,7 +15,7 @@ The risks of the design (`projects/qiick/packages/laravel-audit-design.md`
 | A8 | an erasure deletes evidence | `tests/Feature/ActivityAnonymiserTest.php` (`never deletes a row or changes its event, log, timestamps or morphs`), `tests/Feature/IntegrationTest.php` |
 | A9 | the log is turned off or loses events | `tests/Unit/AuditBootChecksTest.php`, `tests/Feature/ProductionBootFailsTest.php` |
 | A10 | log injection: CR/LF or HTML in `description` | `tests/Feature/IntegrationTest.php` (stored as is); escaping when rendered stays with the product's page |
-| A11 | PostgreSQL type error on `causer_id` | `tests/Feature/ActivityScopesTest.php` (scopes, bindings, trait relation, eager loading), on PostgreSQL in CI |
+| A11 | PostgreSQL type error on `causer_id` | `tests/Feature/ActivityScopesTest.php` (scopes, bindings, subject relation, eager loading), `tests/Feature/CausesActivityTest.php` (causer relation), on PostgreSQL in CI |
 | A12 | the externa backfill corrupts or skips rows | not in this package: `audit:backfill --verify` and the dual write stay with externa 1.6.0 (Luca, 2026-11-24) |
 | A13 | timestamps in the wrong zone | `tests/Unit/AuditBootChecksTest.php`, `tests/Feature/BootFailsTest.php`, `tests/Feature/IntegrationTest.php` (RFC 3339 with `Z`) |
 | A14 | PII left in a free-text `description` | `tests/Feature/ActivityAnonymiserTest.php` (`scrubs identifiers and contact patterns from the description`, `in any string value`) |

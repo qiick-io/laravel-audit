@@ -13,7 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Boot checks (design §4): the activity model and the logging action must
   extend the package's, `app.timezone` must be `UTC` (A13), and in production
   the log must be enabled and unbuffered (A9). `Models\Activity` never
-  serialises its bigint `id`. Adoption steps in UPGRADING.md and the A1–A14
+  serialises its bigint `id`. `Concerns\CausesActivity` (string-safe
+  `activitiesAsCauser()`, A11) and `Concerns\HasActivity` replace Spatie's
+  traits, whose eager loads fail on PostgreSQL for bigint keys and whose
+  HasActivity would bring LogsActivity without the secret floor. Adoption steps in UPGRADING.md and the A1–A14
   test map in docs/security-checklist.md.
 - Spatie's `activitylog:clean` goes through the two retention floors: the
   package's `Actions\CleanActivityLogAction` is the configured clean action,

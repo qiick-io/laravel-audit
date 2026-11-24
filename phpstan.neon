@@ -6,8 +6,9 @@ parameters:
     paths:
         - src
         - config
-        # Uses the LogsActivity trait, so PHPStan analyses the trait.
+        # Use the package traits, so PHPStan analyses them.
         - tests/Support/Models/AuditedIntegerRecord.php
+        - tests/Support/Models/ActiveIntegerRecord.php
     tmpDir: build/phpstan
     treatPhpDocTypesAsCertain: false
     bootstrapFiles:

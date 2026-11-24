@@ -6,6 +6,7 @@ namespace Qiick\Audit\Relations;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Qiick\Audit\Models\Activity;
 
 /**
  * A morphMany whose foreign key is a string column (activity_log's
@@ -25,6 +26,35 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
  */
 final class StringKeyedMorphMany extends MorphMany
 {
+    /**
+     * The activity rows of a model as subject or as causer, on the
+     * configured activity model, table and id column (audit.columns). The
+     * rows follow the model's connection unless the activity model names its
+     * own, as Laravel's relations do.
+     *
+     * @template TParent of Model
+     *
+     * @param  TParent  $parent
+     * @param  'subject'|'causer'  $morphName
+     * @return self<Activity, TParent>
+     */
+    public static function ofActivities(Model $parent, string $morphName): self
+    {
+        $activity = Activity::newConfiguredModel();
+
+        if ($activity->getConnectionName() === null) {
+            $activity->setConnection($parent->getConnectionName());
+        }
+
+        return new self(
+            $activity->newQuery(),
+            $parent,
+            $activity->qualifyColumn("{$morphName}_type"),
+            $activity->qualifyColumn(Activity::idColumn("{$morphName}_id")),
+            $parent->getKeyName(),
+        );
+    }
+
     public function getParentKey(): ?string
     {
         return self::stringOrNull(parent::getParentKey());

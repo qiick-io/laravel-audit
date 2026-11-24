@@ -36,6 +36,9 @@ return [
             // Design §4: the trait is Qiick\Audit\Concerns\LogsActivity, the
             // name of the Spatie trait it replaces in every product model.
             'Qiick\Audit\Concerns\LogsActivity',
+            // The names of the Spatie traits they replace in product models.
+            'Qiick\Audit\Concerns\CausesActivity',
+            'Qiick\Audit\Concerns\HasActivity',
         ],
     ],
 

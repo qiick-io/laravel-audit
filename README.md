@@ -142,6 +142,12 @@ mistakes, not against product code: `Activity::query()->update()` and
 `->delete()` go through the query builder, which the anonymiser and the purge
 use, and the model cannot stop them. Never write to `activity_log` that way.
 
+For models that cause activity, use `Qiick\Audit\Concerns\CausesActivity`
+(or `HasActivity` for both): their `activitiesAsCauser()` / `activities()`
+relations work on PostgreSQL for bigint keys and follow `audit.columns`.
+Never use Spatie's `HasActivity`: it brings Spatie's `LogsActivity` without
+the secret floor.
+
 ## Attribution
 
 Every row the package logs carries server-side attribution, written after
