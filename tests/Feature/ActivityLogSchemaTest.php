@@ -66,10 +66,13 @@ it('makes only id, public_id, description, schema_version and created_at not nul
 it('stores morph ids as strings of 64 characters for bigint, uuid and ulid keys', function (): void {
     $columns = activityLogColumns();
 
-    foreach (['subject_id', 'causer_id', 'request_id'] as $columnName) {
+    foreach (['subject_id', 'causer_id'] as $columnName) {
         expect($columns[$columnName]['type_name'])->toBeIn(['varchar', 'character varying', 'text'])
             ->and($columns[$columnName]['type'])->toContain('64');
     }
+
+    // http-basics accepts request ids of up to 128 characters.
+    expect($columns['request_id']['type'])->toContain('128');
 })->skip(fn (): bool => DB::getDriverName() === 'sqlite', 'SQLite has no varchar length');
 
 it('defaults schema_version to 1', function (): void {
@@ -123,16 +126,20 @@ it('has the design indexes', function (): void {
 
     expect($columnsByIndex)->toEqualCanonicalizing([
         ['public_id'],
-        ['log_name'],
         ['event'],
         ['subject_type', 'subject_id'],
         ['causer_type', 'causer_id'],
-        ['organisation_id'],
+        ['organisation_id', 'created_at'],
+        ['log_name', 'created_at'],
         ['request_id'],
         ['created_at'],
     ]);
 
-    expect($indexes)->toHaveKeys(['subject', 'causer']);
+    // The tenant page (organisation, newest first) and the two purge passes
+    // (log name, created_at) read these; the names are stable for 1.0.
+    expect($indexes)->toHaveKeys(['subject', 'causer', 'activity_log_organisation_created_at', 'activity_log_log_name_created_at'])
+        ->and($indexes['activity_log_organisation_created_at']['columns'])->toBe(['organisation_id', 'created_at'])
+        ->and($indexes['activity_log_log_name_created_at']['columns'])->toBe(['log_name', 'created_at']);
 
     $uniqueIndexes = collect($indexes)
         ->filter(fn (array $index): bool => $index['unique'] && ! $index['primary'])
@@ -142,6 +149,17 @@ it('has the design indexes', function (): void {
 
     expect($uniqueIndexes)->toBe([['public_id']]);
 });
+
+it('stores a request id of 128 characters', function (): void {
+    DB::table('activity_log')->insert([
+        'public_id' => (string) Str::uuid7(),
+        'description' => 'long request id',
+        'request_id' => str_repeat('r', 128),
+        'created_at' => now('UTC'),
+    ]);
+
+    expect(DB::table('activity_log')->value('request_id'))->toBe(str_repeat('r', 128));
+})->skip(fn (): bool => DB::getDriverName() === 'sqlite', 'SQLite has no varchar length');
 
 it('refuses a duplicate public_id', function (): void {
     $publicId = (string) Str::uuid7();

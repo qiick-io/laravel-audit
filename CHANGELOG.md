@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Schema (analysis of 2026-11-24): composite indexes
+  `activity_log_organisation_created_at` and `activity_log_log_name_created_at`
+  for the tenant page and the retention passes (they replace the single
+  `organisation_id` and `log_name` indexes), and `request_id` widened to 128
+  characters, the length qiick/laravel-http-basics accepts.
 - Second re-review of #3: a secret value is logged as `[redacted]` instead of
   dropping its key, so a password or two-factor change is still recorded; a
   name with a secret part is not secret when it ends in `_at` / `_on` or is

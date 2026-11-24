@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\Schema;
  * - public_id (UUID v7), the only id that leaves the database;
  * - organisation_id as uuid, joinable with a uuid organisation key on PostgreSQL;
  * - schema_version (1 = current row format, 0 = legacy externa row);
- * - request_id for correlation and anonymised_at for provable erasure;
+ * - request_id (up to 128 characters) for correlation and anonymised_at for provable erasure;
  * - DATETIME columns, never MySQL TIMESTAMP (which ends on 2038-01-19), and
  *   a NOT NULL created_at, written in UTC by the code, so the retention
  *   purge sees every row.
@@ -30,7 +30,7 @@ return new class extends Migration
         Schema::create('activity_log', function (Blueprint $table): void {
             $table->id();
             $table->uuid('public_id')->unique();
-            $table->string('log_name')->nullable()->index();
+            $table->string('log_name')->nullable();
             $table->text('description');
             $table->string('event')->nullable()->index();
             $table->string('subject_type')->nullable();
@@ -39,16 +39,23 @@ return new class extends Migration
             $table->string('causer_type')->nullable();
             $table->string('causer_id', 64)->nullable();
             $table->index(['causer_type', 'causer_id'], 'causer');
-            $table->uuid('organisation_id')->nullable()->index();
+            $table->uuid('organisation_id')->nullable();
             $table->json('attribute_changes')->nullable();
             $table->json('properties')->nullable();
             $table->unsignedSmallInteger('schema_version')->default(1);
-            $table->string('request_id', 64)->nullable()->index();
+            // 128: qiick/laravel-http-basics accepts request ids of up to 128 characters.
+            $table->string('request_id', 128)->nullable()->index();
             $table->dateTime('anonymised_at')->nullable();
             // No database default: CURRENT_TIMESTAMP follows the session time zone,
             // while the package writes created_at in UTC itself.
             $table->dateTime('created_at')->index();
             $table->dateTime('updated_at')->nullable();
+
+            // The tenant page reads one organisation newest first, and the
+            // two retention passes read by log name and age. Each composite
+            // also serves its first column alone.
+            $table->index(['organisation_id', 'created_at'], 'activity_log_organisation_created_at');
+            $table->index(['log_name', 'created_at'], 'activity_log_log_name_created_at');
         });
     }
 
