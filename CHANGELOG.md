@@ -23,7 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `audit.columns`: the morph relations, the scopes, the trait relation and the
   logger read and write the configured id columns (design §6.3). The package
   binds its `Support\ActivityLogger` in place of Spatie's, which reads
-  `causer_id` by name.
+  `causer_id` by name. This needs `spatie/laravel-activitylog` `^5.1.3`.
 - The `activity_log` migration (design §3, final for 1.0): Spatie's columns
   with `string(64)` morph ids, `public_id` (UUID v7, unique), `organisation_id`
   (uuid), `schema_version` (default 1), `request_id`, `anonymised_at`, the

@@ -34,7 +34,9 @@ Packagist (Packagist publish only after Luca’s go).
   product build on, requires PHP 8.4, so the package cannot support 8.3.
 - Illuminate console / contracts / database / http / support `^12.0 || ^13.0`
   (never `laravel/framework`)
-- `spatie/laravel-activitylog` `^5.0`
+- `spatie/laravel-activitylog` `^5.1.3`: earlier 5.x releases write `causer_id`
+  by name in the logger (`causedByAnonymous()`, the default causer), which
+  `audit.columns` cannot follow
 - Optional: `qiick/laravel-access`, which fills `actor_kind` from its actor
   context.
 
