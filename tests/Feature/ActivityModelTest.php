@@ -3,11 +3,14 @@
 declare(strict_types=1);
 
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Qiick\Audit\Actions\LogActivityAction;
 use Qiick\Audit\Models\Activity;
+use Qiick\Audit\Tests\Support\Models\IntegerKeyedRecord;
+use Qiick\Audit\Tests\Support\Models\ProductActivity;
 use Ramsey\Uuid\Uuid;
 use Spatie\Activitylog\Models\Activity as SpatieActivity;
 
@@ -81,4 +84,43 @@ it('keeps the Spatie casts of properties and attribute_changes', function (): vo
     expect($activity->properties)->toBeInstanceOf(Collection::class)
         ->and($activity->properties?->get('ip'))->toBe('192.0.2.1')
         ->and($activity->attribute_changes)->toBeInstanceOf(Collection::class);
+});
+
+it('builds the configured activity model', function (): void {
+    config()->set('activitylog.activity_model', ProductActivity::class);
+
+    expect(Activity::newConfiguredModel())->toBeInstanceOf(ProductActivity::class);
+});
+
+it('refuses an activity model that does not extend the package model', function (mixed $modelClass): void {
+    config()->set('activitylog.activity_model', $modelClass);
+
+    expect(fn () => Activity::newConfiguredModel())
+        ->toThrow(LogicException::class, 'activitylog.activity_model must extend '.Activity::class.'.');
+})->with([
+    'spatie model' => [SpatieActivity::class],
+    'null' => [null],
+    'not a class' => ['nope'],
+]);
+
+it('refuses an empty or non-string morph column', function (mixed $column): void {
+    config()->set('audit.columns.causer_id', $column);
+
+    expect(fn () => Activity::idColumn('causer_id'))
+        ->toThrow(InvalidArgumentException::class, 'audit.columns.causer_id must name a column.');
+})->with(['empty' => [''], 'null' => [null], 'array' => [['causer_ref']]]);
+
+it('refuses a morph model without an integer or string key', function (): void {
+    $record = new IntegerKeyedRecord;
+
+    expect(fn () => Activity::query()->causedBy($record))
+        ->toThrow(InvalidArgumentException::class, 'An activity morph needs a model with an integer or string key.');
+});
+
+it('includes soft-deleted subjects only when Spatie is told to', function (): void {
+    expect((new Activity)->subject()->removedScopes())->toBe([]);
+
+    config()->set('activitylog.include_soft_deleted_subjects', true);
+
+    expect((new Activity)->subject()->removedScopes())->toBe([SoftDeletingScope::class]);
 });

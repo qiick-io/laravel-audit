@@ -31,6 +31,7 @@ it('merges the design defaults under the audit key', function (): void {
             'token_hash',
             'private_key',
         ])
+        ->and(config('audit.sensitive_parts'))->toBe([])
         ->and(config('audit.personal_keys'))->toBe([]);
 });
 

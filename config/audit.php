@@ -10,9 +10,10 @@ declare(strict_types=1);
  */
 return [
     /*
-     * The secret floor of the LogsActivity trait. These attributes, plus every
-     * attribute cast as `encrypted*` or `hashed`, are never written to
-     * `attribute_changes`. A model can add excludes; it cannot remove these.
+     * The secret floor: exact names (in any spelling) whose values are logged
+     * as `[redacted]`, on top of the built-in list, every attribute cast as
+     * `encrypted*` or `hashed`, and the built-in name parts (password, token,
+     * secret, …). A model can add excludes; it cannot remove these.
      */
     'sensitive_attributes' => [
         'password',
@@ -25,6 +26,14 @@ return [
         'token_hash',
         'private_key',
     ],
+
+    /*
+     * Extra name parts that make an attribute or a nested key secret wherever
+     * they appear, after normalising (lower case, no `_ - .` or spaces), for
+     * names in other languages: ['chiave', 'motdepasse']. Moments, flags and
+     * counts (`*_at`, datetime, boolean, integer casts) are not matched.
+     */
+    'sensitive_parts' => [],
 
     /*
      * Extra keys in `properties` and `attribute_changes` that the anonymiser
