@@ -42,8 +42,7 @@ trait LogsActivity
      */
     public static function extractChanges(Model $model): array
     {
-        return SecretAttributeFloor::fromConfig(config('audit.sensitive_attributes'))
-            ->withoutSecretValues(static::spatieExtractChanges($model));
+        return SecretAttributeFloor::configured()->withoutModels(static::spatieExtractChanges($model));
     }
 
     /**
@@ -92,7 +91,6 @@ trait LogsActivity
      */
     public function attributesToBeLogged(): array
     {
-        return SecretAttributeFloor::fromConfig(config('audit.sensitive_attributes'))
-            ->withoutSecrets($this, $this->spatieAttributesToBeLogged());
+        return SecretAttributeFloor::configured()->loggablePaths($this, $this->spatieAttributesToBeLogged());
     }
 }

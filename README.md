@@ -51,7 +51,8 @@ php artisan vendor:publish --tag=audit-config
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `audit.sensitive_attributes` | `password`, `remember_token`, `two_factor_secret`, `two_factor_recovery_codes`, `key_hash`, `previous_key_hash`, `secret`, `token_hash`, `private_key` | never logged, on top of `encrypted*` and `hashed` casts |
+| `audit.sensitive_attributes` | `password`, `remember_token`, `two_factor_secret`, `two_factor_recovery_codes`, `key_hash`, `previous_key_hash`, `secret`, `token_hash`, `private_key` | logged as `[redacted]`, on top of the built-in names and parts and `encrypted*` / `hashed` casts |
+| `audit.sensitive_parts` | `[]` | extra name parts that make a value secret (other languages) |
 | `audit.personal_keys` | `[]` | extra property keys the anonymiser scrubs |
 | `audit.user_agent_max` | `512` | stored user agent length |
 | `audit.retention_days` | `365` | general retention floor |
@@ -105,26 +106,36 @@ final class Project extends Model
 }
 ```
 
-The trait never logs an attribute cast as `encrypted*` or `hashed`, or named in
-`audit.sensitive_attributes` (case-insensitive), whether the model logs it by
-name, by JSON path (`settings->secret`) or through a relation
-(`owner.password`). A relation path whose segment is not a relation method is
-dropped. A relation logged by name (`owner`, `owner.owner`) is dropped whole,
-and a JSON value logged whole loses every floor key at any depth. Floor names match in
-any spelling (`privateKey`, `remember-token`, `X-Api-Key`), and any name that
-contains `password`, `secret`, `token`, `private_key`, `api_key`,
-`two_factor`, `recovery_code` or `remember` is on the floor. Description
-placeholders read only attributes and relations already loaded on the model,
-never call a model method, and stay as written for a secret or a non-scalar
-value.
+The trait never logs a secret value, but it logs that a secret changed: the
+value becomes `[redacted]` and the key stays, so "the password changed" is in
+the log. A value is secret when the model casts it as `encrypted*` or
+`hashed`, when its name (in any spelling: `privateKey`, `remember-token`,
+`X-Api-Key`) is on the floor (the built-in names, `audit.sensitive_attributes`),
+or when its name contains a secret part: `password`, `secret`, `token`,
+`private_key`, `api_key`, `two_factor`, `recovery_code`, `remember`,
+`passphrase`, `passwd`, `credential`, `authorization`, `cookie`, `session`,
+`segreto`, plus `audit.sensitive_parts` (for names in other languages). A
+name with a secret part is not redacted when the name ends in `_at` / `_on`
+or the cast is a date, a boolean or an integer: `two_factor_confirmed_at`
+records who turned two-factor on, and its value is a time. Short
+abbreviations (`pwd`, `pass`, `otp`, `pin`, `cvv`, `iban`, `dsn`) are exact
+names only.
+
+This holds by name, by JSON path (`settings->secret`), through a relation
+(`owner.password`) and at any depth inside a logged JSON value. A relation
+logged by name (`owner`, `owner.owner`) and any value that holds a model are
+not logged at all. Description placeholders read only attributes and
+relations already loaded on the model, never call a model method, and stay as
+written for a secret or a non-scalar value.
 
 The floor works on names. An accessor that the model logs is the model's
 responsibility: one that returns a related model's `toArray()` or a secret
 under an ordinary name is logged as it returns it.
 
-Audit rows are written once: the model refuses `save()` / `saveQuietly()` on a
-stored row and `delete()` / `deleteQuietly()`, and the package columns are not
-mass-assignable, even inside `Model::unguarded()`. This guards against
+Audit rows are written once: the model refuses to update or delete a stored
+row, with or without model events (`saveQuietly()`, `deleteQuietly()`,
+`Model::withoutEvents()`), and the package columns are not mass-assignable,
+even inside `Model::unguarded()`. This guards against
 mistakes, not against product code: `Activity::query()->update()` and
 `->delete()` go through the query builder, which the anonymiser and the purge
 use, and the model cannot stop them. Never write to `activity_log` that way.

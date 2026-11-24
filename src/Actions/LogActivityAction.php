@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Qiick\Audit\Actions;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 use Qiick\Audit\Models\Activity;
 use Qiick\Audit\Support\SecretAttributeFloor;
 use Spatie\Activitylog\Actions\LogActivityAction as SpatieLogActivityAction;
@@ -17,8 +19,9 @@ use Spatie\Activitylog\Actions\LogActivityAction as SpatieLogActivityAction;
  * that path (design §6.3 spike). The action fills the model's unique ids
  * before either path stores the row.
  *
- * It resolves description placeholders through the secret floor, and it
- * replaces any public_id a caller set.
+ * It redacts secret values in attribute_changes, resolves description
+ * placeholders through the secret floor, and replaces any public_id a
+ * caller set.
  *
  * It also writes `schema_version` itself rather than relying on the column
  * default: externa's adopted table defaults to `0` (legacy rows), and every
@@ -32,8 +35,29 @@ class LogActivityAction extends SpatieLogActivityAction
         $activity->setAttribute('public_id', null);
         $activity->setUniqueIds();
         $activity->setAttribute('schema_version', Activity::currentSchemaVersion());
+        $this->redactSecretChanges($activity);
 
         parent::save($activity);
+    }
+
+    /**
+     * The last step before a row is stored, after every product beforeLogging
+     * callback: secret values in attribute_changes become `[redacted]`, so
+     * the change is recorded without its value (SecretAttributeFloor). The
+     * subject is read only when it is already set on the row.
+     */
+    private function redactSecretChanges(Model $activity): void
+    {
+        $attributeChanges = $activity->getAttribute('attribute_changes');
+
+        if (! $attributeChanges instanceof Collection) {
+            return;
+        }
+
+        $activity->setAttribute('attribute_changes', collect(SecretAttributeFloor::configured()->redactChanges(
+            $attributeChanges->all(),
+            $activity->relationLoaded('subject') ? $activity->getRelation('subject') : null,
+        )));
     }
 
     /**
@@ -47,11 +71,12 @@ class LogActivityAction extends SpatieLogActivityAction
      */
     protected function replacePlaceholders(string $description, Model $activity): string
     {
-        $secretFloor = SecretAttributeFloor::fromConfig(config('audit.sensitive_attributes'));
+        $secretFloor = SecretAttributeFloor::configured();
 
         return preg_replace_callback('/:[a-z0-9._-]+(?<![.])/i', function (array $match) use ($activity, $secretFloor): string {
             $placeholder = $match[0];
-            [$source, $path] = array_pad(explode('.', substr($placeholder, 1), 2), 2, '');
+            $source = Str::before(substr($placeholder, 1), '.');
+            $path = Str::after($placeholder, '.');
 
             if (! in_array($source, ['subject', 'causer', 'properties'], true)) {
                 return $placeholder;

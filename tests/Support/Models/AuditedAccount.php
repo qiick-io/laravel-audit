@@ -42,6 +42,9 @@ final class AuditedAccount extends Model
             'api_token' => 'encrypted',
             'recovery_settings' => 'encrypted:array',
             'pin' => 'hashed',
+            'memo' => 'encrypted',
+            'two_factor_confirmed_at' => 'immutable_datetime',
+            'token_estimate' => 'integer',
         ];
     }
 }

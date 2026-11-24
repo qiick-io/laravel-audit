@@ -46,6 +46,17 @@ final class SecretCastsRecord extends Model
             'encrypted_array_object' => AsEncryptedArrayObject::class,
             'encrypted_collection_class' => AsEncryptedCollection::class,
             'plain_array' => 'array',
+            'session_started' => 'datetime',
+            'password_reset_day' => 'date:Y-m-d',
+            'two_factor_enabled' => 'boolean',
+            'token_count' => 'integer',
+            'secret_version' => 'int',
+            'secret_label' => 'string',
+            'secret_shared' => 'bool',
+            'token_issued' => 'timestamp',
+            'secret_day' => 'immutable_date',
+            'session_closed' => 'immutable_datetime',
+            'pin' => 'integer',
         ];
     }
 }

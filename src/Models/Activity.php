@@ -63,35 +63,23 @@ class Activity extends SpatieActivity
     }
 
     /**
-     * The quiet variants skip the model events that refuse a change, so they
-     * refuse it themselves; a new row may still be inserted quietly.
+     * An audit row is written once. The refusal sits where Eloquent writes
+     * an update or a delete, so it holds with or without model events
+     * (saveQuietly(), deleteQuietly(), Model::withoutEvents()). Only the
+     * anonymiser and the retention purge change rows, through the query
+     * builder, which is outside the model: product code that runs
+     * Activity::query()->update() or ->delete() is not stopped here.
      *
-     * @param  array<string, mixed>  $options
+     * @param  Builder<static>  $query
      */
-    public function saveQuietly(array $options = []): bool
-    {
-        if ($this->exists) {
-            self::refuseChange();
-        }
-
-        return parent::saveQuietly($options);
-    }
-
-    public function deleteQuietly(): ?bool
+    protected function performUpdate(Builder $query): bool
     {
         self::refuseChange();
     }
 
-    /**
-     * An audit row is written once. Only the anonymiser and the retention
-     * purge change rows, through the query builder; the model refuses. The
-     * query builder itself is outside the model: product code that runs
-     * Activity::query()->update() or ->delete() is not stopped here.
-     */
-    protected static function booted(): void
+    protected function performDeleteOnModel(): void
     {
-        static::updating(self::refuseChange(...));
-        static::deleting(self::refuseChange(...));
+        self::refuseChange();
     }
 
     private static function refuseChange(): never

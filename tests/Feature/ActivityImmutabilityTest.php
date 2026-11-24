@@ -84,3 +84,21 @@ it('does not mass-assign the package columns even when unguarded', function (): 
 
     expect($activity->getAttributes())->toBe(['description' => 'filled']);
 });
+
+it('refuses an update or a delete without model events', function (): void {
+    $activity = activity()->log('evidence');
+    assert($activity instanceof Activity);
+
+    expect(fn () => Activity::withoutEvents(fn () => $activity->forceFill(['description' => 'tampered'])->save()))
+        ->toThrow(LogicException::class, 'Activity rows are written once: only the anonymiser and the retention purge change them.')
+        ->and(fn () => Activity::withoutEvents(fn () => $activity->delete()))
+        ->toThrow(LogicException::class, 'Activity rows are written once: only the anonymiser and the retention purge change them.')
+        ->and(Activity::query()->sole()->description)->toBe('evidence');
+});
+
+it('saves a stored row that has not changed without complaint', function (): void {
+    $activity = activity()->log('evidence');
+    assert($activity instanceof Activity);
+
+    expect($activity->save())->toBeTrue();
+});

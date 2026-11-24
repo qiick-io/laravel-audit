@@ -6,6 +6,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Facades\Schema;
 use Qiick\Audit\Models\Activity;
+use Qiick\Audit\Support\SecretAttributeFloor;
 use Qiick\Audit\Tests\Support\CreatesKeyedRecordTables;
 use Qiick\Audit\Tests\Support\Models\AuditedAccount;
 use Qiick\Audit\Tests\Support\Models\AuditedAccountLoggingPaths;
@@ -45,6 +46,11 @@ beforeEach(function (): void {
         $table->text('settings')->nullable();
         $table->text('options')->nullable();
         $table->text('flags')->nullable();
+        $table->text('memo')->nullable();
+        $table->dateTime('two_factor_confirmed_at')->nullable();
+        $table->dateTime('password_changed_at')->nullable();
+        $table->integer('token_estimate')->nullable();
+        $table->integer('session_lifetime')->nullable();
         $table->timestamps();
     });
 });
@@ -57,17 +63,6 @@ function loggedAttributeChanges(string $event): array
     $activity = Activity::query()->where('event', $event)->sole();
 
     return $activity->attribute_changes?->toArray() ?? [];
-}
-
-/**
- * @return list<string>
- */
-function loggedKeys(array $changes): array
-{
-    return array_values(array_unique([
-        ...array_keys($changes['attributes'] ?? []),
-        ...array_keys($changes['old'] ?? []),
-    ]));
 }
 
 const SECRET_VALUES = ['hunter2', 'remember-me', 'shared-secret', '-----BEGIN KEY-----', 'tok_live', '1234'];
@@ -93,6 +88,7 @@ function createAuditedAccount(): AuditedAccount
         'api_token' => 'tok_live',
         'recovery_settings' => ['codes' => ['1234']],
         'pin' => '1234',
+        'memo' => 'tok_live',
     ]);
 }
 
@@ -104,16 +100,19 @@ it('logs the ordinary attributes on create', function (): void {
     expect($changes['attributes'])->toMatchArray(['name' => 'Ada', 'email' => 'ada@example.com']);
 });
 
-it('keeps encrypted, hashed and floor attributes out on create (A1)', function (): void {
+it('redacts encrypted, hashed and floor attributes on create (A1)', function (): void {
     createAuditedAccount();
 
     $changes = loggedAttributeChanges('created');
 
-    expect(loggedKeys($changes))->not->toContain('password', 'Remember_Token', 'secret', 'private_key', 'api_token', 'recovery_settings', 'pin');
+    expect($changes['attributes'])->toMatchArray(array_fill_keys(
+        ['password', 'Remember_Token', 'secret', 'private_key', 'api_token', 'recovery_settings', 'pin'],
+        SecretAttributeFloor::REDACTED,
+    ));
     expectNoSecretValueIn($changes);
 });
 
-it('keeps them out of attributes and old on update (A1)', function (): void {
+it('records that a secret changed, never its old or new value (A1, review B5)', function (): void {
     $account = createAuditedAccount();
 
     $account->update([
@@ -125,17 +124,39 @@ it('keeps them out of attributes and old on update (A1)', function (): void {
 
     $changes = loggedAttributeChanges('updated');
 
-    expect($changes['attributes'])->toBe(['name' => 'Ada L.'])
-        ->and($changes['old'])->toBe(['name' => 'Ada']);
+    $redacted = SecretAttributeFloor::REDACTED;
+
+    expect($changes['attributes'])->toBe(['name' => 'Ada L.', 'password' => $redacted, 'api_token' => $redacted, 'pin' => $redacted])
+        ->and($changes['old'])->toBe(['name' => 'Ada', 'password' => $redacted, 'api_token' => $redacted, 'pin' => $redacted]);
     expectNoSecretValueIn($changes);
 });
 
-it('logs nothing when only secrets change', function (): void {
+it('logs a password change on its own, without the value (review B5)', function (): void {
     $account = createAuditedAccount();
 
-    $account->update(['password' => 'hunter3', 'api_token' => 'tok_live_3']);
+    $account->update(['password' => 'hunter3']);
 
-    expect(Activity::query()->where('event', 'updated')->count())->toBe(0);
+    expect(loggedAttributeChanges('updated'))->toBe([
+        'attributes' => ['password' => SecretAttributeFloor::REDACTED],
+        'old' => ['password' => SecretAttributeFloor::REDACTED],
+    ]);
+});
+
+it('logs a two-factor confirmation with its time (review B5)', function (): void {
+    $account = createAuditedAccount();
+    $this->travelTo(now('UTC')->setDate(2026, 11, 24)->setTime(9, 30));
+
+    $account->update(['two_factor_confirmed_at' => now('UTC'), 'password_changed_at' => now('UTC'), 'token_estimate' => 5, 'session_lifetime' => 120]);
+
+    $changes = loggedAttributeChanges('updated');
+
+    expect($changes['attributes'])->toMatchArray([
+        'two_factor_confirmed_at' => '2026-11-24T09:30:00.000000Z',
+        'password_changed_at' => '2026-11-24 09:30:00',
+        'token_estimate' => 5,
+        // No cast says it is a number, so the secret part `session` redacts it (fail closed).
+        'session_lifetime' => SecretAttributeFloor::REDACTED,
+    ])->and($changes['old'])->toMatchArray(['two_factor_confirmed_at' => null, 'token_estimate' => null]);
 });
 
 it('keeps them out of old on delete (A1)', function (): void {
@@ -158,7 +179,7 @@ it('uses the design defaults: default log, only dirty, no empty changes', functi
     expect(loggedAttributeChanges('updated')['attributes'])->toBe(['name' => 'Ada L.']);
 });
 
-it('keeps the floor when a model logs secrets explicitly, by path or through a relation (A1)', function (): void {
+it('redacts secrets a model logs explicitly, by path or through a relation (A1)', function (): void {
     $parent = createAuditedAccount();
 
     AuditedAccountWithOptions::query()->create([
@@ -174,16 +195,29 @@ it('keeps the floor when a model logs secrets explicitly, by path or through a r
     $activity = Activity::query()->where('log_name', 'accounts')->sole();
     $changes = $activity->attribute_changes?->toArray() ?? [];
 
-    expect($changes['attributes'])->toBe(['name' => 'Grace']);
+    $redacted = SecretAttributeFloor::REDACTED;
+
+    expect($changes['attributes'])->toBe([
+        'name' => 'Grace',
+        'password' => $redacted,
+        'secret' => $redacted,
+        'api_token' => $redacted,
+        'settings' => ['secret' => $redacted],
+        'parentAccount.password' => $redacted,
+    ]);
     expectNoSecretValueIn($changes);
 });
 
 it('applies config additions to the floor', function (): void {
     config()->set('audit.sensitive_attributes', [...config('audit.sensitive_attributes'), 'email']);
+    config()->set('audit.sensitive_parts', ['nome']);
 
-    createAuditedAccount();
+    AuditedAccount::query()->create(['name' => 'Ada', 'email' => 'ada@example.com', 'settings' => '{"nome_utente":"ada"}']);
 
-    expect(loggedKeys(loggedAttributeChanges('created')))->not->toContain('email');
+    $changes = loggedAttributeChanges('created');
+
+    expect($changes['attributes']['email'])->toBe(SecretAttributeFloor::REDACTED)
+        ->and($changes['attributes']['name'])->toBe('Ada');
 });
 
 it('keeps the built-in floor when the config list is emptied (A1)', function (): void {
@@ -193,7 +227,7 @@ it('keeps the built-in floor when the config list is emptied (A1)', function ():
 
     $changes = loggedAttributeChanges('created');
 
-    expect(loggedKeys($changes))->not->toContain('password', 'Remember_Token', 'secret', 'private_key');
+    expect($changes['attributes'])->toMatchArray(array_fill_keys(['password', 'Remember_Token', 'secret', 'private_key'], SecretAttributeFloor::REDACTED));
     expectNoSecretValueIn($changes);
 });
 
@@ -217,7 +251,7 @@ it('never logs a related model named as an attribute, nor its decrypted secrets 
     expectNoSecretValueIn($changes);
 })->with(['parentAccount', 'parent_account', 'parentAccount.parentAccount']);
 
-it('drops secret keys nested at any depth in a JSON column (A1, review B2)', function (): void {
+it('redacts secret keys nested at any depth in a JSON column (A1, review B2)', function (): void {
     $account = AuditedAccountWithJson::query()->create([
         'name' => 'Json',
         'settings' => ['theme' => 'dark', 'Password' => 'hunter2', 'nested' => ['secret' => 'shared-secret', 'list' => [['private_key' => '-----BEGIN KEY-----', 'label' => 'kept']]]],
@@ -225,14 +259,17 @@ it('drops secret keys nested at any depth in a JSON column (A1, review B2)', fun
 
     $created = loggedAttributeChanges('created');
 
-    expect($created['attributes']['settings'])->toBe(['theme' => 'dark', 'nested' => ['list' => [['label' => 'kept']]]]);
+    $redacted = SecretAttributeFloor::REDACTED;
+    $createdSettings = ['theme' => 'dark', 'Password' => $redacted, 'nested' => ['secret' => $redacted, 'list' => [['private_key' => $redacted, 'label' => 'kept']]]];
+
+    expect($created['attributes']['settings'])->toBe($createdSettings);
     expectNoSecretValueIn($created);
 
     $account->update(['settings' => ['theme' => 'light', 'token_hash' => 'remember-me']]);
     $updated = loggedAttributeChanges('updated');
 
-    expect($updated['attributes']['settings'])->toBe(['theme' => 'light'])
-        ->and($updated['old']['settings'])->toBe(['theme' => 'dark', 'nested' => ['list' => [['label' => 'kept']]]]);
+    expect($updated['attributes']['settings'])->toBe(['theme' => 'light', 'token_hash' => $redacted])
+        ->and($updated['old']['settings'])->toBe($createdSettings);
     expectNoSecretValueIn($updated);
 
     $account->delete();
@@ -240,7 +277,7 @@ it('drops secret keys nested at any depth in a JSON column (A1, review B2)', fun
     expectNoSecretValueIn(loggedAttributeChanges('deleted'));
 });
 
-it('drops secret keys from collection and array object casts (A1)', function (): void {
+it('redacts secret keys in collection and array object casts (A1)', function (): void {
     AuditedAccountWithJson::query()->create([
         'name' => 'Objects',
         'options' => ['secret' => 'shared-secret', 'mode' => 'fast'],
@@ -249,8 +286,8 @@ it('drops secret keys from collection and array object casts (A1)', function ():
 
     $changes = loggedAttributeChanges('created');
 
-    expect($changes['attributes']['options'])->toBe(['mode' => 'fast'])
-        ->and($changes['attributes']['flags'])->toBe(['beta' => true]);
+    expect($changes['attributes']['options'])->toBe(['secret' => SecretAttributeFloor::REDACTED, 'mode' => 'fast'])
+        ->and($changes['attributes']['flags'])->toBe(['two_factor_secret' => SecretAttributeFloor::REDACTED, 'beta' => true]);
     expectNoSecretValueIn($changes);
 });
 
@@ -258,11 +295,11 @@ it('leaves description placeholders for secrets and related models unresolved (A
     $account = createAuditedAccount();
 
     activity()->performedOn($account)->causedBy($account)
-        ->log('renamed :subject.name with :subject.api_token, :causer.PASSWORD, :subject.pin, :subject.parentAccount, :subject.recovery_settings and :subject');
+        ->log('renamed :subject.name with :subject.api_token, :causer.PASSWORD, :subject.pin, :subject.memo, :subject.parentAccount, :subject.recovery_settings and :subject');
 
     $description = Activity::query()->latest('id')->firstOrFail()->description;
 
-    expect($description)->toBe('renamed Ada with :subject.api_token, :causer.PASSWORD, :subject.pin, :subject.parentAccount, :subject.recovery_settings and :subject');
+    expect($description)->toBe('renamed Ada with :subject.api_token, :causer.PASSWORD, :subject.pin, :subject.memo, :subject.parentAccount, :subject.recovery_settings and :subject');
 });
 
 it('still resolves ordinary placeholders, properties included', function (): void {

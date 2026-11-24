@@ -10,6 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Second re-review of #3: a secret value is logged as `[redacted]` instead of
+  dropping its key, so a password or two-factor change is still recorded; a
+  name with a secret part is not secret when it ends in `_at` / `_on` or is
+  cast as a date, boolean or integer (`two_factor_confirmed_at` is logged
+  with its time). New built-in names (`pwd`, `pass`, `otp`, `pin`, `cvv`,
+  `iban`, `signing_key`, `dsn`) and parts (`passphrase`, `passwd`,
+  `credential`, `authorization`, `cookie`, `session`, `segreto`), and
+  `audit.sensitive_parts`. The write-once model refuses updates and deletes
+  where Eloquent performs them, so `Model::withoutEvents()` no longer gets
+  around it.
 - Re-review of #3: description placeholders read only loaded attributes and
   relations and never call a model method (`:subject.delete.x` deleted the
   subject); floor names match in any spelling and by secret part
