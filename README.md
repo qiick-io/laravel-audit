@@ -1,0 +1,83 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/assets/header-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset=".github/assets/header-light.svg">
+    <img alt="laravel-audit: Audit log core for Laravel products" src=".github/assets/header-light.svg" width="100%">
+  </picture>
+</p>
+
+# qiick/laravel-audit
+
+> **In development. Not released and not on Packagist yet: do not depend on it.**
+
+Shared audit log for qiick Laravel products, on top of
+[`spatie/laravel-activitylog`](https://github.com/spatie/laravel-activitylog) v5:
+the common `activity_log` table (string morph ids, `public_id`, an optional
+`organisation_id`), a logging trait with a secret floor, server-side
+attribution (who acted, through which credential), a GDPR anonymisation
+contract and a two-floor retention purge. Product audit tables stay in the
+products.
+
+Part of the qiick fleet. Binding design:
+`projects/qiick/packages/laravel-audit-design.md` in the knowledge base
+(decisions: `decisions/2026-11-23-pre-1-0-extractions.md`).
+
+## Status
+
+Pre-`0.1.0`. Public APIs may change in any 0.x release; see [UPGRADING.md](./UPGRADING.md).
+Do not require this package from production apps until a tagged release lands on
+Packagist (Packagist publish only after Luca’s go).
+
+## Requirements
+
+- PHP `^8.4`. `spatie/laravel-activitylog` v5, which the design and every
+  product build on, requires PHP 8.4, so the package cannot support 8.3.
+- Illuminate console / contracts / database / http / support `^12.0 || ^13.0`
+  (never `laravel/framework`)
+- `spatie/laravel-activitylog` `^5.0`
+- Optional: `qiick/laravel-access`, which fills `actor_kind` from its actor
+  context.
+
+## Install (when published)
+
+```bash
+composer require qiick/laravel-audit
+php artisan vendor:publish --tag=audit-config
+```
+
+## Configuration
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `audit.sensitive_attributes` | `password`, `remember_token`, `two_factor_secret`, `two_factor_recovery_codes`, `key_hash`, `previous_key_hash`, `secret`, `token_hash`, `private_key` | never logged, on top of `encrypted*` and `hashed` casts |
+| `audit.personal_keys` | `[]` | extra property keys the anonymiser scrubs |
+| `audit.user_agent_max` | `512` | stored user agent length |
+| `audit.retention_days` | `365` | general retention floor |
+| `audit.security_log_name` | `auth` | the security log, kept longer |
+| `audit.security_retention_days` | `730` | security log retention floor |
+| `audit.purge.schedule` | `true` | the provider schedules the purge daily |
+| `audit.migrations.load` | `true` | load the package's `activity_log` migration |
+| `audit.columns` | `subject_id` / `causer_id` | morph id columns (externa 1.x only changes them) |
+
+## Deprecation policy
+
+This package follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) (SemVer):
+
+- **Deprecation in minor releases:** When a public API (class, method, interface, config key,
+  or environment variable) is deprecated, it is marked with `@deprecated` docblocks, documented
+  in `CHANGELOG.md` and `UPGRADING.md`, and triggers a runtime notice or warning where appropriate.
+  The deprecated feature remains functional and supported for at least one minor release.
+- **Removal in major releases only:** Deprecated APIs are never removed within the same major
+  version (`0.x` or `1.x`). Breaking removals occur exclusively at the next major release
+  boundary (e.g. `2.0.0`).
+- **Pre-1.0 stability:** In `0.x`, breaking changes are documented in `UPGRADING.md` before
+  each tagged release. Once `1.0.0` ships, public contracts and migrations are frozen and
+  follow strict SemVer forward compatibility.
+
+## Security
+
+Private vulnerability reporting: see [SECURITY.md](./SECURITY.md).
+
+## License
+
+MIT. See [LICENSE](./LICENSE).
