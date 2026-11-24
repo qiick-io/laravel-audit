@@ -49,8 +49,8 @@ return [
      * Retention (Luca, 2026-11-23): every log is kept 365 days, the security
      * log 730 days. The daily `audit:purge` deletes in two chunked passes so
      * the two floors cannot be conflated. retention_days also feeds Spatie's
-     * activitylog.clean_after_days, but products must not schedule
-     * activitylog:clean: it would purge the security log after 365 days.
+     * activitylog.clean_after_days, and Spatie's activitylog:clean goes
+     * through the same two floors (the package's clean action).
      */
     'retention_days' => 365,
     'security_log_name' => 'auth',

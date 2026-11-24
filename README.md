@@ -221,9 +221,11 @@ the security log past `audit.retention_days`, then security log rows past
 `audit.purge.time` (UTC); a product that runs it itself sets
 `audit.purge.schedule` to `false`.
 
-**Remove `activitylog:clean` from the product's schedule.** It takes one
-cutoff, so it would purge the security log after 365 days; the package logs a
-warning every time it runs.
+Spatie's `activitylog:clean` goes through the same two floors: the package
+sets `activitylog.actions.clean_log` to its own clean action, so
+`activitylog:clean --days=1` (or a named log) never deletes a row younger than
+365 days, or an `auth` row younger than 730. A product that keeps it in the
+schedule loses nothing; `audit:purge` alone is enough.
 
 ## Querying
 

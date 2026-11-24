@@ -4,14 +4,10 @@ declare(strict_types=1);
 
 namespace Qiick\Audit\Tests\Feature;
 
-use Illuminate\Console\Events\CommandStarting;
 use Illuminate\Console\Scheduling\Event as ScheduledEvent;
 use Illuminate\Console\Scheduling\Schedule;
-use Illuminate\Support\Facades\Log;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Qiick\Audit\Tests\Support\PackageTestCase;
-use Symfony\Component\Console\Input\ArrayInput;
-use Symfony\Component\Console\Output\NullOutput;
 
 /**
  * The purge schedule follows audit.purge.time, and a product that runs the
@@ -69,19 +65,6 @@ final class PurgeScheduleConfigTest extends PackageTestCase
 
             $this->assertSame([$expression], $this->purgeExpressions());
         }
-    }
-
-    public function test_the_activitylog_clean_warning_names_the_configured_floor(): void
-    {
-        config()->set('audit.security_log_name', 'security');
-        config()->set('audit.security_retention_days', 1000);
-        $log = Log::spy();
-
-        event(new CommandStarting('activitylog:clean', new ArrayInput([]), new NullOutput));
-
-        $log->shouldHaveReceived('warning')->once()->with(
-            'activitylog:clean ignores the 1000-day floor of the security log: remove it from the schedule, audit:purge applies both retention floors.',
-        );
     }
 
     protected function defineEnvironment($app): void

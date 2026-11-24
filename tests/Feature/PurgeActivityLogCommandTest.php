@@ -2,21 +2,17 @@
 
 declare(strict_types=1);
 
-use Illuminate\Console\Events\CommandStarting;
 use Illuminate\Console\Scheduling\Event as ScheduledEvent;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
-use Symfony\Component\Console\Input\ArrayInput;
-use Symfony\Component\Console\Output\NullOutput;
 
 /*
  * Retention (Luca, 2026-11-23, design §10): every log is kept 365 days, the
  * `auth` security log 730 days. audit:purge deletes in two chunked passes on
  * created_at, so a 365-day pass can never purge an auth row early; it
- * replaces Spatie's activitylog:clean, which takes one cutoff and one log.
+ * is what Spatie's activitylog:clean runs too (CleanActivityLogActionTest).
  */
 
 uses(DatabaseMigrations::class);
@@ -161,15 +157,4 @@ it('schedules the purge daily at 03:00 UTC by default', function (): void {
     expect($purgeEvents)->toHaveCount(1)
         ->and($purgeEvents[0]->expression)->toBe('0 3 * * *')
         ->and($purgeEvents[0]->timezone)->toBe('UTC');
-});
-
-it('warns when activitylog:clean runs, because it would purge the security log early', function (): void {
-    Log::spy();
-
-    event(new CommandStarting('activitylog:clean', new ArrayInput([]), new NullOutput));
-    event(new CommandStarting('audit:purge', new ArrayInput([]), new NullOutput));
-
-    Log::shouldHaveReceived('warning')->once()->with(
-        'activitylog:clean ignores the 730-day floor of the auth log: remove it from the schedule, audit:purge applies both retention floors.',
-    );
 });

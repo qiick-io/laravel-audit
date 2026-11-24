@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace Qiick\Audit\Laravel;
 
-use Illuminate\Console\Events\CommandStarting;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Routing\Events\RouteMatched;
 use Illuminate\Support\ServiceProvider;
 use InvalidArgumentException;
+use Qiick\Audit\Actions\CleanActivityLogAction;
 use Qiick\Audit\Actions\LogActivityAction;
 use Qiick\Audit\Anonymisation\ActivityAnonymiser;
 use Qiick\Audit\AuditContext;
@@ -20,6 +20,7 @@ use Qiick\Audit\Models\Activity;
 use Qiick\Audit\Resolvers\NullOrganisationResolver;
 use Qiick\Audit\Resolvers\RequestAttributeActorResolver;
 use Qiick\Audit\Support\ActivityLogger;
+use Spatie\Activitylog\Actions\CleanActivityLogAction as SpatieCleanActivityLogAction;
 use Spatie\Activitylog\Actions\LogActivityAction as SpatieLogActivityAction;
 use Spatie\Activitylog\Models\Activity as SpatieActivity;
 use Spatie\Activitylog\Support\ActivityLogger as SpatieActivityLogger;
@@ -52,8 +53,8 @@ final class AuditServiceProvider extends ServiceProvider
      * Retention is a privacy obligation (design §10), so the purge does not
      * depend on a product remembering to schedule it: it runs daily unless
      * the product turns `audit.purge.schedule` off and runs it itself.
-     * Spatie's activitylog:clean has one cutoff and would purge the security
-     * log early, so running it is logged as a warning.
+     * Spatie's activitylog:clean goes through the package's clean action, so
+     * it applies the same two floors.
      */
     private function scheduleTheRetentionPurge(): void
     {
@@ -75,21 +76,6 @@ final class AuditServiceProvider extends ServiceProvider
 
             $schedule->command(PurgeActivityLogCommand::class)->dailyAt($purgeTime)->timezone('UTC');
         });
-
-        $this->app->make('events')->listen(CommandStarting::class, function (CommandStarting $commandStarting) use ($config): void {
-            if ($commandStarting->command !== 'activitylog:clean') {
-                return;
-            }
-
-            $securityLogName = $config->get('audit.security_log_name');
-            $securityRetentionDays = $config->get('audit.security_retention_days');
-
-            $this->app->make('log')->warning(sprintf(
-                'activitylog:clean ignores the %s-day floor of the %s log: remove it from the schedule, audit:purge applies both retention floors.',
-                is_int($securityRetentionDays) ? $securityRetentionDays : '?',
-                is_string($securityLogName) ? $securityLogName : '?',
-            ));
-        });
     }
 
     /**
@@ -110,6 +96,12 @@ final class AuditServiceProvider extends ServiceProvider
 
         if ($configuredAction === null || $configuredAction === SpatieLogActivityAction::class) {
             $config->set('activitylog.actions.log_activity', LogActivityAction::class);
+        }
+
+        $configuredCleanAction = $config->get('activitylog.actions.clean_log');
+
+        if ($configuredCleanAction === null || $configuredCleanAction === SpatieCleanActivityLogAction::class) {
+            $config->set('activitylog.actions.clean_log', CleanActivityLogAction::class);
         }
     }
 

@@ -10,14 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Spatie's `activitylog:clean` goes through the two retention floors: the
+  package's `Actions\CleanActivityLogAction` is the configured clean action,
+  so no path (not even `--days=1`) deletes a row younger than its floor; the
+  warning on `activitylog:clean` is gone (analysis AU-l).
 - Retention (Luca, 2026-11-23): `audit:purge` deletes rows outside the `auth`
   security log older than `audit.retention_days` (365), then `auth` rows older
   than `audit.security_retention_days` (730), in chunks of
   `audit.purge.chunk_size` ids. The provider schedules it daily at
   `audit.purge.time` (03:00 UTC) unless `audit.purge.schedule` is false,
-  feeds `audit.retention_days` to `activitylog.clean_after_days`, and logs a
-  warning whenever `activitylog:clean` runs, because its single cutoff would
-  purge the security log early. Misconfigured floors (zero, negative, a
+  and feeds `audit.retention_days` to `activitylog.clean_after_days`. Misconfigured floors (zero, negative, a
   security floor shorter than the general one) fail the command and delete
   nothing.
 - Erasure replaces identifiers as whole words only (`Al` no longer corrupts

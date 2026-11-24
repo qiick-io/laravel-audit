@@ -6,6 +6,7 @@ namespace Qiick\Audit\Tests\Feature;
 
 use Qiick\Audit\Tests\Support\Models\ProductActivity;
 use Qiick\Audit\Tests\Support\PackageTestCase;
+use Qiick\Audit\Tests\Support\ProductCleanActivityLogAction;
 use Qiick\Audit\Tests\Support\ProductLogActivityAction;
 
 /**
@@ -19,11 +20,13 @@ final class ActivityModelConfiguredTest extends PackageTestCase
         parent::defineEnvironment($app);
         $app['config']->set('activitylog.activity_model', ProductActivity::class);
         $app['config']->set('activitylog.actions.log_activity', ProductLogActivityAction::class);
+        $app['config']->set('activitylog.actions.clean_log', ProductCleanActivityLogAction::class);
     }
 
     public function test_it_keeps_the_product_model_and_action(): void
     {
         $this->assertSame(ProductActivity::class, config('activitylog.activity_model'));
         $this->assertSame(ProductLogActivityAction::class, config('activitylog.actions.log_activity'));
+        $this->assertSame(ProductCleanActivityLogAction::class, config('activitylog.actions.clean_log'));
     }
 }
