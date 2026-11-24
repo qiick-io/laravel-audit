@@ -126,8 +126,8 @@ it('records that a secret changed, never its old or new value (A1, review B5)', 
 
     $redacted = SecretAttributeFloor::REDACTED;
 
-    expect($changes['attributes'])->toBe(['name' => 'Ada L.', 'password' => $redacted, 'api_token' => $redacted, 'pin' => $redacted])
-        ->and($changes['old'])->toBe(['name' => 'Ada', 'password' => $redacted, 'api_token' => $redacted, 'pin' => $redacted]);
+    expect($changes['attributes'])->toEqual(['name' => 'Ada L.', 'password' => $redacted, 'api_token' => $redacted, 'pin' => $redacted])
+        ->and($changes['old'])->toEqual(['name' => 'Ada', 'password' => $redacted, 'api_token' => $redacted, 'pin' => $redacted]);
     expectNoSecretValueIn($changes);
 });
 
@@ -136,7 +136,7 @@ it('logs a password change on its own, without the value (review B5)', function 
 
     $account->update(['password' => 'hunter3']);
 
-    expect(loggedAttributeChanges('updated'))->toBe([
+    expect(loggedAttributeChanges('updated'))->toEqual([
         'attributes' => ['password' => SecretAttributeFloor::REDACTED],
         'old' => ['password' => SecretAttributeFloor::REDACTED],
     ]);
@@ -172,11 +172,11 @@ it('uses the design defaults: default log, only dirty, no empty changes', functi
     $account = createAuditedAccount();
     $account->update(['name' => 'Ada']);
 
-    expect(Activity::query()->sole()->log_name)->toBe('default');
+    expect(Activity::query()->sole()->log_name)->toEqual('default');
 
     $account->update(['name' => 'Ada L.', 'email' => 'ada@example.com']);
 
-    expect(loggedAttributeChanges('updated')['attributes'])->toBe(['name' => 'Ada L.']);
+    expect(loggedAttributeChanges('updated')['attributes'])->toEqual(['name' => 'Ada L.']);
 });
 
 it('redacts secrets a model logs explicitly, by path or through a relation (A1)', function (): void {
@@ -197,7 +197,7 @@ it('redacts secrets a model logs explicitly, by path or through a relation (A1)'
 
     $redacted = SecretAttributeFloor::REDACTED;
 
-    expect($changes['attributes'])->toBe([
+    expect($changes['attributes'])->toEqual([
         'name' => 'Grace',
         'password' => $redacted,
         'secret' => $redacted,
@@ -216,8 +216,8 @@ it('applies config additions to the floor', function (): void {
 
     $changes = loggedAttributeChanges('created');
 
-    expect($changes['attributes']['email'])->toBe(SecretAttributeFloor::REDACTED)
-        ->and($changes['attributes']['name'])->toBe('Ada');
+    expect($changes['attributes']['email'])->toEqual(SecretAttributeFloor::REDACTED)
+        ->and($changes['attributes']['name'])->toEqual('Ada');
 });
 
 it('keeps the built-in floor when the config list is emptied (A1)', function (): void {
@@ -236,7 +236,7 @@ it('logs an ordinary relation attribute', function (): void {
 
     AuditedAccountWithOwner::query()->create(['name' => 'Linked', 'owner_id' => $owner->getKey()]);
 
-    expect(loggedAttributeChanges('created')['attributes'])->toBe(['name' => 'Linked', 'owner.name' => 'Owner']);
+    expect(loggedAttributeChanges('created')['attributes'])->toEqual(['name' => 'Linked', 'owner.name' => 'Owner']);
 });
 
 it('never logs a related model named as an attribute, nor its decrypted secrets (A1, review B1)', function (string $attributePath): void {
@@ -247,7 +247,7 @@ it('never logs a related model named as an attribute, nor its decrypted secrets 
 
     $changes = Activity::query()->forSubject($child)->sole()->attribute_changes?->toArray() ?? [];
 
-    expect($changes['attributes'])->toBe(['name' => 'Child']);
+    expect($changes['attributes'])->toEqual(['name' => 'Child']);
     expectNoSecretValueIn($changes);
 })->with(['parentAccount', 'parent_account', 'parentAccount.parentAccount']);
 
@@ -262,14 +262,14 @@ it('redacts secret keys nested at any depth in a JSON column (A1, review B2)', f
     $redacted = SecretAttributeFloor::REDACTED;
     $createdSettings = ['theme' => 'dark', 'Password' => $redacted, 'nested' => ['secret' => $redacted, 'list' => [['private_key' => $redacted, 'label' => 'kept']]]];
 
-    expect($created['attributes']['settings'])->toBe($createdSettings);
+    expect($created['attributes']['settings'])->toEqual($createdSettings);
     expectNoSecretValueIn($created);
 
     $account->update(['settings' => ['theme' => 'light', 'token_hash' => 'remember-me']]);
     $updated = loggedAttributeChanges('updated');
 
-    expect($updated['attributes']['settings'])->toBe(['theme' => 'light', 'token_hash' => $redacted])
-        ->and($updated['old']['settings'])->toBe($createdSettings);
+    expect($updated['attributes']['settings'])->toEqual(['theme' => 'light', 'token_hash' => $redacted])
+        ->and($updated['old']['settings'])->toEqual($createdSettings);
     expectNoSecretValueIn($updated);
 
     $account->delete();
@@ -286,8 +286,8 @@ it('redacts secret keys in collection and array object casts (A1)', function ():
 
     $changes = loggedAttributeChanges('created');
 
-    expect($changes['attributes']['options'])->toBe(['secret' => SecretAttributeFloor::REDACTED, 'mode' => 'fast'])
-        ->and($changes['attributes']['flags'])->toBe(['two_factor_secret' => SecretAttributeFloor::REDACTED, 'beta' => true]);
+    expect($changes['attributes']['options'])->toEqual(['secret' => SecretAttributeFloor::REDACTED, 'mode' => 'fast'])
+        ->and($changes['attributes']['flags'])->toEqual(['two_factor_secret' => SecretAttributeFloor::REDACTED, 'beta' => true]);
     expectNoSecretValueIn($changes);
 });
 
@@ -299,7 +299,7 @@ it('leaves description placeholders for secrets and related models unresolved (A
 
     $description = Activity::query()->latest('id')->firstOrFail()->description;
 
-    expect($description)->toBe('renamed Ada with :subject.api_token, :causer.PASSWORD, :subject.pin, :subject.memo, :subject.parentAccount, :subject.recovery_settings and :subject');
+    expect($description)->toEqual('renamed Ada with :subject.api_token, :causer.PASSWORD, :subject.pin, :subject.memo, :subject.parentAccount, :subject.recovery_settings and :subject');
 });
 
 it('still resolves ordinary placeholders, properties included', function (): void {
@@ -309,5 +309,5 @@ it('still resolves ordinary placeholders, properties included', function (): voi
         ->log(':subject.email changed by :causer.name for :properties.reason x:properties.count (:properties.secret, :event.x, :description)');
 
     expect(Activity::query()->latest('id')->firstOrFail()->description)
-        ->toBe('ada@example.com changed by Ada for audit x3 (:properties.secret, :event.x, :description)');
+        ->toEqual('ada@example.com changed by Ada for audit x3 (:properties.secret, :event.x, :description)');
 });
