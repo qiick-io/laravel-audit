@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Qiick\Audit\Actions;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Str;
 use Qiick\Audit\Models\Activity;
 use Qiick\Audit\Support\SecretAttributeFloor;
 use Spatie\Activitylog\Actions\LogActivityAction as SpatieLogActivityAction;
@@ -39,10 +38,12 @@ class LogActivityAction extends SpatieLogActivityAction
 
     /**
      * Spatie's `:subject.x`, `:causer.x` and `:properties.x` placeholders,
-     * minus what the secret floor forbids: a placeholder whose path is secret
-     * for the model (SecretAttributeFloor), names a floor key in properties,
-     * or resolves to anything but a scalar (a related model, a JSON value) is
-     * left as written, so a description never carries a decrypted secret.
+     * read safely. A description can carry text a user typed, so a
+     * placeholder never calls a model method (review B3): it reads only
+     * attributes the model holds and relations already loaded on it. A
+     * placeholder that names a secret (SecretAttributeFloor), goes through a
+     * relation that is not loaded, or resolves to anything but a scalar is
+     * left as written.
      */
     protected function replacePlaceholders(string $description, Model $activity): string
     {
@@ -50,21 +51,41 @@ class LogActivityAction extends SpatieLogActivityAction
 
         return preg_replace_callback('/:[a-z0-9._-]+(?<![.])/i', function (array $match) use ($activity, $secretFloor): string {
             $placeholder = $match[0];
-            $source = Str::before(Str::after($placeholder, ':'), '.');
-            $path = Str::after($placeholder, '.');
+            [$source, $path] = array_pad(explode('.', substr($placeholder, 1), 2), 2, '');
 
             if (! in_array($source, ['subject', 'causer', 'properties'], true)) {
                 return $placeholder;
             }
 
             $target = $activity->getAttribute($source);
-            $isSecret = $target instanceof Model
-                ? $secretFloor->isSecret($target, $path)
-                : $secretFloor->namesAFloorKey(explode('.', $path));
-
-            $value = $isSecret ? null : data_get($target, $path);
+            $value = $target instanceof Model
+                ? self::loadedAttribute($target, $path, $secretFloor)
+                : ($secretFloor->namesAFloorKey(explode('.', $path)) ? null : data_get($target, $path));
 
             return is_scalar($value) ? (string) $value : $placeholder;
         }, $description) ?? $description;
+    }
+
+    /**
+     * @param  string  $path  loaded relation names, then the attribute, dot-separated
+     */
+    private static function loadedAttribute(Model $model, string $path, SecretAttributeFloor $secretFloor): mixed
+    {
+        $segments = explode('.', $path);
+        $attribute = array_pop($segments);
+
+        foreach ($segments as $relationName) {
+            $model = $model->relationLoaded($relationName) ? $model->getRelation($relationName) : null;
+
+            if (! $model instanceof Model) {
+                return null;
+            }
+        }
+
+        if (! array_key_exists($attribute, $model->getAttributes()) || $secretFloor->isSecret($model, $attribute)) {
+            return null;
+        }
+
+        return $model->getAttribute($attribute);
     }
 }

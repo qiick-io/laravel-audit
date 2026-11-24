@@ -38,7 +38,7 @@ it('adds the configured names, case-insensitively', function (): void {
 
 it('treats encrypted and hashed casts as secret', function (string $column): void {
     expect(secretFloor()->isSecret(new SecretCastsRecord, $column))->toBeTrue();
-})->with(['encrypted_value', 'encrypted_array', 'encrypted_collection', 'encrypted_object', 'hashed_value', 'Hashed_Value', 'mixed_case_secret', 'encrypted_array_object', 'encrypted_collection_class']);
+})->with(['encrypted_value', 'encrypted_array', 'encrypted_collection', 'encrypted_object', 'hashed_value', 'Hashed_Value', 'mixed_case_value', 'encrypted_array_object', 'encrypted_collection_class']);
 
 it('logs ordinary casts and attributes', function (string $column): void {
     expect(secretFloor()->isSecret(new SecretCastsRecord, $column))->toBeFalse();
@@ -131,3 +131,43 @@ it('drops values that hold models and floor keys at any depth', function (): voi
         'json_object' => ['theme' => 'dark'],
     ]);
 });
+
+it('matches floor names whatever their spelling (review B4)', function (string $key): void {
+    expect(secretFloor()->namesAFloorKey([$key]))->toBeTrue();
+})->with([
+    'privateKey', 'private-key', 'Private Key', 'private.key', 'twoFactorSecret', 'two-factor-secret',
+    'remember-token', 'RememberToken', 'apiSecret', 'client_secret', 'webhookSecret', 'accessToken',
+    'refresh_token', 'api_token', 'apiKey', 'api-key', 'X-Api-Key', 'twoFactorRecoveryCodes', 'recovery_code',
+    'userPassword', 'password_confirmation', 'keyHash', 'previous-key-hash', 'tokenHash',
+]);
+
+it('keeps keys that only look like the floor in part', function (string $key): void {
+    expect(secretFloor()->namesAFloorKey([$key]))->toBeFalse();
+})->with(['name', 'key', 'hash', 'theme', 'api_version', 'factor', 'private', 'email']);
+
+it('matches configured names whatever their spelling, exactly', function (): void {
+    expect(secretFloor(['signing_salt'])->namesAFloorKey(['signingSalt']))->toBeTrue()
+        ->and(secretFloor(['signing_salt'])->namesAFloorKey(['signing_salt_label']))->toBeFalse();
+});
+
+it('drops nested keys whatever their spelling (review B4)', function (): void {
+    expect(secretFloor()->withoutSecretValues(['config' => [
+        'privateKey' => 'PK', 'twoFactorSecret' => 'TFS', 'remember-token' => 'RT', 'PASSWORD' => 'UP',
+        'nested' => [['password' => 'NP', 'apiSecret' => 'AS', 'label' => 'kept']],
+    ]]))->toBe(['config' => ['nested' => [['label' => 'kept']]]]);
+});
+
+it('never calls a method that is not a typed relation to walk a path (review B3)', function (string $attributePath): void {
+    $record = new SecretCastsRecord;
+
+    expect(secretFloor()->isSecret($record, $attributePath))->toBeTrue()
+        ->and(SecretCastsRecord::$untypedMethodCalls)->toBe(0);
+})->with(['untypedMethod.name', 'delete.name', 'touch.name', 'replicate.name', 'maybeRelation.name']);
+
+it('treats a name as secret when it holds one secret part', function (string $key): void {
+    expect(secretFloor()->namesAFloorKey([$key]))->toBeTrue();
+})->with(['userPassword', 'clientSecret', 'accessToken', 'privateKeyPem', 'xApiKey', 'twoFactorEnabled', 'recoveryCodes', 'rememberMe', "tab\tSecret", "line\nToken"]);
+
+it('removes each separator before matching', function (string $key): void {
+    expect(secretFloor()->namesAFloorKey([$key]))->toBeTrue();
+})->with(['api_key', 'api-key', 'api.key', 'api key', "api\tkey", "api\nkey"]);

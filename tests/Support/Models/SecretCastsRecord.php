@@ -7,6 +7,7 @@ namespace Qiick\Audit\Tests\Support\Models;
 use Illuminate\Database\Eloquent\Casts\AsEncryptedArrayObject;
 use Illuminate\Database\Eloquent\Casts\AsEncryptedCollection;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /** Every secret cast Laravel offers, next to ordinary ones. */
 final class SecretCastsRecord extends Model
@@ -17,6 +18,14 @@ final class SecretCastsRecord extends Model
     {
         self::$untypedMethodCalls++;
 
+        return null;
+    }
+
+    /**
+     * @return BelongsTo<IntegerKeyedRecord, $this>|null
+     */
+    public function maybeRelation(): ?BelongsTo
+    {
         return null;
     }
 
@@ -33,7 +42,7 @@ final class SecretCastsRecord extends Model
             'encrypted_collection' => 'encrypted:collection',
             'encrypted_object' => 'encrypted:object',
             'hashed_value' => 'hashed',
-            'Mixed_Case_Secret' => 'encrypted',
+            'Mixed_Case_Value' => 'encrypted',
             'encrypted_array_object' => AsEncryptedArrayObject::class,
             'encrypted_collection_class' => AsEncryptedCollection::class,
             'plain_array' => 'array',

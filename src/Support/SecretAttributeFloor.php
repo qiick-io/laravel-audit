@@ -32,7 +32,7 @@ use Spatie\Activitylog\Support\ChangeDetector;
  */
 final class SecretAttributeFloor
 {
-    /** @var list<string> lower-cased floor names */
+    /** @var list<string> normalised floor names (see normalise()) */
     private readonly array $floorNames;
 
     /**
@@ -40,7 +40,19 @@ final class SecretAttributeFloor
      */
     public function __construct(array $configuredAttributes)
     {
-        $this->floorNames = array_map(strtolower(...), [...self::builtInAttributes(), ...$configuredAttributes]);
+        $this->floorNames = array_map(self::normalise(...), [...self::builtInAttributes(), ...$configuredAttributes]);
+    }
+
+    /**
+     * Parts of a name that make it secret wherever they appear, in their
+     * normalised form (review B4): `userPassword`, `client_secret`,
+     * `accessToken`, `X-Api-Key`, `twoFactorRecoveryCodes`, `remember-token`.
+     *
+     * @return list<string>
+     */
+    public static function builtInSecretParts(): array
+    {
+        return ['password', 'secret', 'token', 'privatekey', 'apikey', 'twofactor', 'recoverycode', 'remember'];
     }
 
     /**
@@ -139,12 +151,40 @@ final class SecretAttributeFloor
     public function namesAFloorKey(array $keys): bool
     {
         foreach ($keys as $key) {
-            if (in_array(strtolower($key), $this->floorNames, true)) {
+            if ($this->isFloorName($key)) {
                 return true;
             }
         }
 
         return false;
+    }
+
+    /**
+     * A name is on the floor when, once normalised, it equals a floor name or
+     * contains a secret part, so every spelling of a key matches: snake_case,
+     * camelCase, kebab-case, dotted or spaced, in any letter case.
+     */
+    private function isFloorName(string $name): bool
+    {
+        $normalisedName = self::normalise($name);
+
+        if (in_array($normalisedName, $this->floorNames, true)) {
+            return true;
+        }
+
+        foreach (self::builtInSecretParts() as $secretPart) {
+            if (str_contains($normalisedName, $secretPart)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** Lower case, without `_`, `-`, `.`, spaces, tabs and line breaks. */
+    private static function normalise(string $name): string
+    {
+        return strtolower(str_replace(['_', '-', '.', ' ', "\t", "\n"], '', $name));
     }
 
     /**
@@ -189,7 +229,7 @@ final class SecretAttributeFloor
         $safeValue = [];
 
         foreach ($value as $key => $nestedValue) {
-            if (is_string($key) && in_array(strtolower($key), $this->floorNames, true)) {
+            if (is_string($key) && $this->isFloorName($key)) {
                 continue;
             }
 
@@ -226,23 +266,37 @@ final class SecretAttributeFloor
      */
     private function namesARelation(Model $model, string $column): bool
     {
-        $methodName = ChangeDetector::resolveRelationName($model, $column);
+        return self::typedRelationMethod($model, $column) !== null;
+    }
+
+    /**
+     * The relation method a path segment names (Spatie's own lookup: as
+     * written, snake_case or camelCase), when its declared return type is a
+     * Relation. Only such a method is ever called: an untyped or other method
+     * (`delete`, `touch`, `replicate`) is never run to find out (review B3).
+     */
+    private static function typedRelationMethod(Model $model, string $segment): ?string
+    {
+        $methodName = ChangeDetector::resolveRelationName($model, $segment);
 
         if (! method_exists($model, $methodName)) {
-            return false;
+            return null;
         }
 
         $returnType = (new ReflectionMethod($model, $methodName))->getReturnType();
 
-        return $returnType instanceof ReflectionNamedType
-            && is_a($returnType->getName(), Relation::class, true);
+        if (! $returnType instanceof ReflectionNamedType || ! is_a($returnType->getName(), Relation::class, true)) {
+            return null;
+        }
+
+        return $methodName;
     }
 
     private function relatedModel(Model $model, string $relationSegment): ?Model
     {
-        $relationName = ChangeDetector::resolveRelationName($model, $relationSegment);
+        $relationName = self::typedRelationMethod($model, $relationSegment);
 
-        if (! method_exists($model, $relationName)) {
+        if ($relationName === null) {
             return null;
         }
 

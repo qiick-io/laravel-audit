@@ -10,6 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Re-review of #3: description placeholders read only loaded attributes and
+  relations and never call a model method (`:subject.delete.x` deleted the
+  subject); floor names match in any spelling and by secret part
+  (`privateKey`, `apiSecret`, `X-Api-Key`); `saveQuietly()`,
+  `deleteQuietly()` and `Model::unguarded()` no longer get around the
+  write-once model; `created_at` has no database default (the code writes it
+  in UTC).
 - Review of #2/#3: relations logged by name and models nested in a value are
   dropped, floor keys nested in JSON values are removed at any depth, and
   description placeholders never resolve a secret or a non-scalar. The

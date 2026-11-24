@@ -110,12 +110,24 @@ The trait never logs an attribute cast as `encrypted*` or `hashed`, or named in
 name, by JSON path (`settings->secret`) or through a relation
 (`owner.password`). A relation path whose segment is not a relation method is
 dropped. A relation logged by name (`owner`, `owner.owner`) is dropped whole,
-and a JSON value logged whole loses every floor key at any depth. Description
-placeholders (`:subject.api_token`) for a secret or a non-scalar value stay as
-written.
+and a JSON value logged whole loses every floor key at any depth. Floor names match in
+any spelling (`privateKey`, `remember-token`, `X-Api-Key`), and any name that
+contains `password`, `secret`, `token`, `private_key`, `api_key`,
+`two_factor`, `recovery_code` or `remember` is on the floor. Description
+placeholders read only attributes and relations already loaded on the model,
+never call a model method, and stay as written for a secret or a non-scalar
+value.
 
-Audit rows are written once: the model refuses `save()` on a stored row and
-`delete()`, and the package columns are not mass-assignable.
+The floor works on names. An accessor that the model logs is the model's
+responsibility: one that returns a related model's `toArray()` or a secret
+under an ordinary name is logged as it returns it.
+
+Audit rows are written once: the model refuses `save()` / `saveQuietly()` on a
+stored row and `delete()` / `deleteQuietly()`, and the package columns are not
+mass-assignable, even inside `Model::unguarded()`. This guards against
+mistakes, not against product code: `Activity::query()->update()` and
+`->delete()` go through the query builder, which the anonymiser and the purge
+use, and the model cannot stop them. Never write to `activity_log` that way.
 
 ## Querying
 

@@ -258,11 +258,11 @@ it('leaves description placeholders for secrets and related models unresolved (A
     $account = createAuditedAccount();
 
     activity()->performedOn($account)->causedBy($account)
-        ->log('renamed :subject.name with :subject.api_token, :causer.PASSWORD, :subject.parentAccount, :subject.recovery_settings and :subject');
+        ->log('renamed :subject.name with :subject.api_token, :causer.PASSWORD, :subject.pin, :subject.parentAccount, :subject.recovery_settings and :subject');
 
     $description = Activity::query()->latest('id')->firstOrFail()->description;
 
-    expect($description)->toBe('renamed Ada with :subject.api_token, :causer.PASSWORD, :subject.parentAccount, :subject.recovery_settings and :subject');
+    expect($description)->toBe('renamed Ada with :subject.api_token, :causer.PASSWORD, :subject.pin, :subject.parentAccount, :subject.recovery_settings and :subject');
 });
 
 it('still resolves ordinary placeholders, properties included', function (): void {

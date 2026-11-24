@@ -52,27 +52,59 @@ class Activity extends SpatieActivity
 
     /**
      * The package's columns are written by the package (the logging action,
-     * the attributor, the anonymiser), never by mass assignment.
+     * the attributor, the anonymiser), never by mass assignment, even inside
+     * Model::unguarded().
      *
-     * @return array<string>
+     * @param  string  $key
      */
-    public function getGuarded(): array
+    public function isFillable($key): bool
     {
-        return [...parent::getGuarded(), 'id', 'public_id', 'organisation_id', 'schema_version', 'request_id', 'anonymised_at'];
+        return ! in_array($key, self::packageColumns(), true) && parent::isFillable($key);
+    }
+
+    /**
+     * The quiet variants skip the model events that refuse a change, so they
+     * refuse it themselves; a new row may still be inserted quietly.
+     *
+     * @param  array<string, mixed>  $options
+     */
+    public function saveQuietly(array $options = []): bool
+    {
+        if ($this->exists) {
+            self::refuseChange();
+        }
+
+        return parent::saveQuietly($options);
+    }
+
+    public function deleteQuietly(): ?bool
+    {
+        self::refuseChange();
     }
 
     /**
      * An audit row is written once. Only the anonymiser and the retention
-     * purge change rows, through the query builder; the model refuses.
+     * purge change rows, through the query builder; the model refuses. The
+     * query builder itself is outside the model: product code that runs
+     * Activity::query()->update() or ->delete() is not stopped here.
      */
     protected static function booted(): void
     {
-        $refuseChange = static function (): never {
-            throw new LogicException('Activity rows are written once: only the anonymiser and the retention purge change them.');
-        };
+        static::updating(self::refuseChange(...));
+        static::deleting(self::refuseChange(...));
+    }
 
-        static::updating($refuseChange);
-        static::deleting($refuseChange);
+    private static function refuseChange(): never
+    {
+        throw new LogicException('Activity rows are written once: only the anonymiser and the retention purge change them.');
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function packageColumns(): array
+    {
+        return ['id', 'public_id', 'organisation_id', 'schema_version', 'request_id', 'anonymised_at'];
     }
 
     /**

@@ -17,7 +17,8 @@ use Illuminate\Support\Facades\Schema;
  * - schema_version (1 = current row format, 0 = legacy externa row);
  * - request_id for correlation and anonymised_at for provable erasure;
  * - DATETIME columns, never MySQL TIMESTAMP (which ends on 2038-01-19), and
- *   a created_at that is always set, so the retention purge sees every row.
+ *   a NOT NULL created_at, written in UTC by the code, so the retention
+ *   purge sees every row.
  *
  * No foreign keys: activity morphs never cascade, and audit rows are
  * anonymised, never deleted or hidden. Editable here until 1.0.0.
@@ -44,7 +45,9 @@ return new class extends Migration
             $table->unsignedSmallInteger('schema_version')->default(1);
             $table->string('request_id', 64)->nullable()->index();
             $table->dateTime('anonymised_at')->nullable();
-            $table->dateTime('created_at')->useCurrent()->index();
+            // No database default: CURRENT_TIMESTAMP follows the session time zone,
+            // while the package writes created_at in UTC itself.
+            $table->dateTime('created_at')->index();
             $table->dateTime('updated_at')->nullable();
         });
     }

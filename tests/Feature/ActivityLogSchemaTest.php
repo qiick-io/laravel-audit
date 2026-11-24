@@ -78,6 +78,7 @@ it('defaults schema_version to 1', function (): void {
     DB::table('activity_log')->insert([
         'public_id' => (string) Str::uuid7(),
         'description' => 'inserted without a version',
+        'created_at' => now('UTC'),
     ]);
 
     expect(DB::table('activity_log')->value('schema_version'))->toEqual(1);
@@ -99,6 +100,7 @@ it('types organisation_id and public_id as uuid so they join a uuid organisation
         'public_id' => (string) Str::uuid7(),
         'description' => 'joined',
         'organisation_id' => $organisationId,
+        'created_at' => now('UTC'),
     ]);
 
     $joinedCount = DB::table('activity_log')
@@ -143,9 +145,9 @@ it('has the design indexes', function (): void {
 
 it('refuses a duplicate public_id', function (): void {
     $publicId = (string) Str::uuid7();
-    DB::table('activity_log')->insert(['public_id' => $publicId, 'description' => 'first']);
+    DB::table('activity_log')->insert(['public_id' => $publicId, 'description' => 'first', 'created_at' => now('UTC')]);
 
-    expect(fn () => DB::table('activity_log')->insert(['public_id' => $publicId, 'description' => 'second']))
+    expect(fn () => DB::table('activity_log')->insert(['public_id' => $publicId, 'description' => 'second', 'created_at' => now('UTC')]))
         ->toThrow(QueryException::class);
 });
 
@@ -173,14 +175,13 @@ it('stores the timestamps as DATETIME, never a MySQL TIMESTAMP that ends in 2038
     expect((string) DB::table('activity_log')->value('created_at'))->toStartWith('2040-06-01 12:00:00');
 });
 
-it('fills created_at when an insert leaves it out', function (): void {
-    DB::table('activity_log')->insert(['public_id' => (string) Str::uuid7(), 'description' => 'no timestamp']);
-
-    expect(DB::table('activity_log')->value('created_at'))->not->toBeNull();
+it('refuses an insert without created_at instead of taking the database session clock', function (): void {
+    expect(fn () => DB::table('activity_log')->insert(['public_id' => (string) Str::uuid7(), 'description' => 'no timestamp']))
+        ->toThrow(QueryException::class);
 });
 
 it('refuses to roll back over audit rows in production', function (): void {
-    DB::table('activity_log')->insert(['public_id' => (string) Str::uuid7(), 'description' => 'evidence']);
+    DB::table('activity_log')->insert(['public_id' => (string) Str::uuid7(), 'description' => 'evidence', 'created_at' => now('UTC')]);
     app()->detectEnvironment(fn (): string => 'production');
 
     $migration = require dirname(__DIR__, 2).'/database/migrations/2026_11_24_000000_create_activity_log_table.php';
