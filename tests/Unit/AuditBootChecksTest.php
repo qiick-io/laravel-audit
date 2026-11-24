@@ -2,10 +2,12 @@
 
 declare(strict_types=1);
 
+use Qiick\Audit\Actions\CleanActivityLogAction;
 use Qiick\Audit\Actions\LogActivityAction;
 use Qiick\Audit\Laravel\AuditBootChecks;
 use Qiick\Audit\Models\Activity;
 use Qiick\Audit\Tests\Support\Models\ProductActivity;
+use Qiick\Audit\Tests\Support\ProductCleanActivityLogAction;
 use Qiick\Audit\Tests\Support\ProductLogActivityAction;
 use Spatie\Activitylog\Actions\LogActivityAction as SpatieLogActivityAction;
 use Spatie\Activitylog\Models\Activity as SpatieActivity;
@@ -32,6 +34,7 @@ it('passes with the package defaults', function (): void {
 it('accepts a product model and action that extend the package ones', function (): void {
     config()->set('activitylog.activity_model', ProductActivity::class);
     config()->set('activitylog.actions.log_activity', ProductLogActivityAction::class);
+    config()->set('activitylog.actions.clean_log', ProductCleanActivityLogAction::class);
 
     bootChecks('production')->assert();
 
@@ -81,3 +84,10 @@ it('allows a disabled or buffered log outside production', function (): void {
 
     expect(true)->toBeTrue();
 });
+
+it('fails when the clean action does not extend the package clean action', function (mixed $actionClass): void {
+    config()->set('activitylog.actions.clean_log', $actionClass);
+
+    expect(fn () => bootChecks()->assert())
+        ->toThrow(RuntimeException::class, 'activitylog.actions.clean_log must extend '.CleanActivityLogAction::class.': it applies the two retention floors.');
+})->with(['spatie action' => [Spatie\Activitylog\Actions\CleanActivityLogAction::class], 'null' => [null]]);

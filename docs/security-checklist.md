@@ -21,4 +21,7 @@ The risks of the design (`projects/qiick/packages/laravel-audit-design.md`
 | A14 | PII left in a free-text `description` | `tests/Feature/ActivityAnonymiserTest.php` (`scrubs identifiers and contact patterns from the description`, `in any string value`) |
 
 Retention (design §10): `tests/Feature/PurgeActivityLogCommandTest.php`,
-`tests/Feature/PurgeScheduleConfigTest.php`.
+`tests/Feature/PurgeScheduleConfigTest.php`,
+`tests/Feature/CleanActivityLogActionTest.php` (Spatie's `activitylog:clean`
+honours both floors). Write-once rows: `tests/Feature/ActivityImmutabilityTest.php`,
+`tests/Arch/ActivityWritesArchitectureTest.php`.

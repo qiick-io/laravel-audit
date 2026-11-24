@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Qiick\Audit\Laravel;
 
 use Illuminate\Contracts\Config\Repository as ConfigRepository;
+use Qiick\Audit\Actions\CleanActivityLogAction;
 use Qiick\Audit\Actions\LogActivityAction;
 use Qiick\Audit\Models\Activity;
 use RuntimeException;
@@ -12,9 +13,9 @@ use RuntimeException;
 /**
  * The checks that stop the application from booting (design §4):
  *
- * - the activity model and the logging action are the package's, or extend
- *   them: the public_id, the string-safe scopes and the server-side
- *   attribution live there;
+ * - the activity model, the logging action and the clean action are the
+ *   package's, or extend them: the public_id, the string-safe scopes, the
+ *   server-side attribution and the retention floors live there;
  * - `app.timezone` is UTC (A13);
  * - in production, the log is on and written before the response (A9: OWASP,
  *   security events must not be lost or turned off by one env variable).
@@ -40,6 +41,12 @@ final readonly class AuditBootChecks
 
         if (! is_string($logActivityAction) || ! is_a($logActivityAction, LogActivityAction::class, true)) {
             throw new RuntimeException('activitylog.actions.log_activity must extend '.LogActivityAction::class.': it writes the server-side attribution.');
+        }
+
+        $cleanActivityLogAction = $this->config->get('activitylog.actions.clean_log');
+
+        if (! is_string($cleanActivityLogAction) || ! is_a($cleanActivityLogAction, CleanActivityLogAction::class, true)) {
+            throw new RuntimeException('activitylog.actions.clean_log must extend '.CleanActivityLogAction::class.': it applies the two retention floors.');
         }
 
         if ($this->config->get('app.timezone') !== 'UTC') {

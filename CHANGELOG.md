@@ -10,10 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Boot checks (design §4): the activity model and the logging action must
-  extend the package's, `app.timezone` must be `UTC` (A13), and in production
+- Boot checks (design §4): the activity model, the logging action and the
+  clean action must extend the package's, `app.timezone` must be `UTC` (A13), and in production
   the log must be enabled and unbuffered (A9). `Models\Activity` never
-  serialises its bigint `id`. `Concerns\CausesActivity` (string-safe
+  serialises its bigint `id`. An architecture test allows query-builder
+  writes to `activity_log` only in the anonymiser and the purge, and the
+  README states the trust boundary (a database role without UPDATE /
+  DELETE). `Concerns\CausesActivity` (string-safe
   `activitiesAsCauser()`, A11) and `Concerns\HasActivity` replace Spatie's
   traits, whose eager loads fail on PostgreSQL for bigint keys and whose
   HasActivity would bring LogsActivity without the secret floor. Adoption steps in UPGRADING.md and the A1–A14
