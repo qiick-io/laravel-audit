@@ -15,8 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the reserved property keys `ip`, `user_agent` (cut to
   `audit.user_agent_max`), `actor_kind`, `api_key_id`, `api_key_prefix`,
   `api_key_created_by` and `oauth_client_id` (caller values removed, A2); the
-  causer rule (a bound credential's owner principal, the web session user,
-  an unattended job's own causer); `organisation_id` from
+  causer rule (a bound credential's owner principal replaces the caller's
+  causer; otherwise an explicit `causedBy()` / `causedByAnonymous()` is kept
+  and the signed-in user is the default); `organisation_id` from
   `Audit::inOrganisation()` or the `OrganisationResolver`, never from
   properties (A3); `request_id` from the `request_id` key of Laravel's
   context. The ip and user agent come only from a routed HTTP request.

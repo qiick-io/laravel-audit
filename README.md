@@ -152,7 +152,16 @@ every `beforeLogging` callback, so a caller can never forge it:
 | `api_key_id`, `api_key_prefix`, `api_key_created_by` | the bound API key: public UUID, display prefix, creator's public id |
 | `oauth_client_id` | the bound OAuth grant's client UUID |
 
-A caller's value for any of these keys is removed. The key or OAuth middleware
+A caller's value for any of these keys is removed.
+
+The causer: when a credential acts, its owner principal replaces any causer
+the caller chose. Otherwise the caller's choice stands: an explicit
+`causedBy($admin)` (an admin stopping an impersonation) or
+`causedByAnonymous()` is kept, and the signed-in user is the causer when none
+was chosen. Description placeholders are resolved before this rule, so under
+a credential `:causer.name` names the caller's causer, not the owner.
+
+The key or OAuth middleware
 binds the credential once it is verified:
 
 ```php

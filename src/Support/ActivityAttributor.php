@@ -25,9 +25,13 @@ use Qiick\Audit\Models\Activity;
  *   HTTP request only (none in a console command or a queued job);
  *   whatever the caller put there is removed, and only the server's values
  *   are written (A2);
- * - the causer rule: when a credential, a web session or another actor with
- *   a causer acts, that causer replaces the caller's; an unattended job keeps
- *   the causer it set, or none;
+ * - the causer rule (design §4): when a credential acts, its owner principal
+ *   replaces the caller's causer. Otherwise the caller's choice stands: an
+ *   explicit causedBy() or causedByAnonymous() is kept (an admin stopping an
+ *   impersonation is the causer, not the impersonated session user, review
+ *   B6), and Spatie's default makes the signed-in user the causer when none
+ *   was chosen. A placeholder such as `:causer.name` is resolved before this
+ *   rule, so under a credential it names the caller's causer;
  * - the organisation: the explicit one (Audit::inOrganisation()) or the
  *   OrganisationResolver's, never properties (A3), always a UUID;
  * - the request id, from the `request_id` key of Laravel's context (the key
@@ -49,7 +53,7 @@ final class ActivityAttributor
     {
         $actor = $this->actorResolver->current();
 
-        if ($actor->actorKind !== 'unattended' && $actor->causer !== null) {
+        if ($actor->isCredential() && $actor->causer !== null) {
             $activity->causer()->associate($actor->causer);
         }
 

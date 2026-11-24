@@ -399,3 +399,31 @@ it('refuses a user agent limit that is not a positive integer', function (mixed 
     expect(fn () => $this->withHeader('User-Agent', 'Browser')->post('/audit-test'))
         ->toThrow(InvalidArgumentException::class, 'audit.user_agent_max must be a positive integer.');
 })->with(['zero' => [0], 'negative' => [-1], 'string' => ['512'], 'null' => [null]]);
+
+it('keeps an explicit causer in a web session, as an impersonation stop needs (review B6)', function (): void {
+    $impersonatedUser = AuthenticatableRecord::query()->create(['name' => 'impersonated']);
+    $admin = AuthenticatableRecord::query()->create(['name' => 'admin']);
+    $this->actingAs($impersonatedUser);
+
+    activity('auth')->causedBy($admin)->performedOn($impersonatedUser)->log('stopped impersonating');
+
+    expect(Activity::query()->sole()->causer?->is($admin))->toBeTrue()
+        ->and(loggedProperties()['actor_kind'])->toBe('web_session');
+});
+
+it('keeps an explicitly anonymous causer in a web session (review B6)', function (): void {
+    $this->actingAs(AuthenticatableRecord::query()->create(['name' => 'signed in']));
+
+    activity()->causedByAnonymous()->log('system notice');
+
+    expect(Activity::query()->sole()->causer_id)->toBeNull();
+});
+
+it('makes the signed-in user the causer when none was chosen', function (): void {
+    $user = AuthenticatableRecord::query()->create(['name' => 'web']);
+    $this->actingAs($user);
+
+    activity()->log('web action');
+
+    expect(Activity::query()->sole()->causer?->is($user))->toBeTrue();
+});
