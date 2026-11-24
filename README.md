@@ -59,6 +59,8 @@ php artisan vendor:publish --tag=audit-config
 | `audit.security_log_name` | `auth` | the security log, kept longer |
 | `audit.security_retention_days` | `730` | security log retention floor |
 | `audit.purge.schedule` | `true` | the provider schedules the purge daily |
+| `audit.purge.time` | `03:00` | when the scheduled purge runs, UTC |
+| `audit.purge.chunk_size` | `1000` | rows deleted per statement |
 | `audit.migrations.load` | `true` | load the package's `activity_log` migration |
 | `audit.columns` | `subject_id` / `causer_id` | morph id columns (externa 1.x only changes them) |
 
@@ -209,6 +211,19 @@ personal keys, the identifiers (as whole words) and any email address or phone-l
 become the tombstone, and `anonymised_at` is set. A second run reports
 `0` rows. The tombstone must not contain an identifier or look like an email
 address or a phone number.
+
+## Retention
+
+Every log is kept 365 days and the `auth` security log 730 days.
+`php artisan audit:purge` deletes in two passes on `created_at`: rows outside
+the security log past `audit.retention_days`, then security log rows past
+`audit.security_retention_days`. The provider schedules it daily at
+`audit.purge.time` (UTC); a product that runs it itself sets
+`audit.purge.schedule` to `false`.
+
+**Remove `activitylog:clean` from the product's schedule.** It takes one
+cutoff, so it would purge the security log after 365 days; the package logs a
+warning every time it runs.
 
 ## Querying
 

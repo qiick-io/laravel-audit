@@ -4,11 +4,15 @@ declare(strict_types=1);
 
 namespace Qiick\Audit\Laravel;
 
+use Illuminate\Console\Events\CommandStarting;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Routing\Events\RouteMatched;
 use Illuminate\Support\ServiceProvider;
+use InvalidArgumentException;
 use Qiick\Audit\Actions\LogActivityAction;
 use Qiick\Audit\Anonymisation\ActivityAnonymiser;
 use Qiick\Audit\AuditContext;
+use Qiick\Audit\Console\Commands\PurgeActivityLogCommand;
 use Qiick\Audit\Contracts\AuditActorResolver;
 use Qiick\Audit\Contracts\AuditAnonymiser;
 use Qiick\Audit\Contracts\OrganisationResolver;
@@ -45,6 +49,50 @@ final class AuditServiceProvider extends ServiceProvider
     }
 
     /**
+     * Retention is a privacy obligation (design §10), so the purge does not
+     * depend on a product remembering to schedule it: it runs daily unless
+     * the product turns `audit.purge.schedule` off and runs it itself.
+     * Spatie's activitylog:clean has one cutoff and would purge the security
+     * log early, so running it is logged as a warning.
+     */
+    private function scheduleTheRetentionPurge(): void
+    {
+        $config = $this->app->make('config');
+        $config->set('activitylog.clean_after_days', $config->get('audit.retention_days'));
+
+        $this->commands([PurgeActivityLogCommand::class]);
+
+        $this->callAfterResolving(Schedule::class, function (Schedule $schedule) use ($config): void {
+            if ($config->get('audit.purge.schedule') !== true) {
+                return;
+            }
+
+            $purgeTime = $config->get('audit.purge.time');
+
+            if (! is_string($purgeTime) || preg_match('/\A([01]\d|2[0-3]):[0-5]\d\z/', $purgeTime) !== 1) {
+                throw new InvalidArgumentException('audit.purge.time must be a time of day as HH:MM.');
+            }
+
+            $schedule->command(PurgeActivityLogCommand::class)->dailyAt($purgeTime)->timezone('UTC');
+        });
+
+        $this->app->make('events')->listen(CommandStarting::class, function (CommandStarting $commandStarting) use ($config): void {
+            if ($commandStarting->command !== 'activitylog:clean') {
+                return;
+            }
+
+            $securityLogName = $config->get('audit.security_log_name');
+            $securityRetentionDays = $config->get('audit.security_retention_days');
+
+            $this->app->make('log')->warning(sprintf(
+                'activitylog:clean ignores the %s-day floor of the %s log: remove it from the schedule, audit:purge applies both retention floors.',
+                is_int($securityRetentionDays) ? $securityRetentionDays : '?',
+                is_string($securityLogName) ? $securityLogName : '?',
+            ));
+        });
+    }
+
+    /**
      * Point Spatie at the package model and logging action unless the product
      * configured its own (which must extend the package's). Done at boot, after Spatie's
      * provider has merged its defaults.
@@ -68,6 +116,7 @@ final class AuditServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->useThePackageModelAndAction();
+        $this->scheduleTheRetentionPurge();
 
         // Spatie binds its logger in register(); binding at boot replaces it
         // whatever order the providers registered in.
