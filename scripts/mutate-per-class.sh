@@ -15,6 +15,7 @@ cd "$ROOT"
 # NullOrganisationResolver is not listed: it only returns null, so pest
 # creates no mutant for it.
 CLASSES=(
+  'Qiick\Audit\Laravel\AuditBootChecks'
   'Qiick\Audit\Support\RetentionPurger'
   'Qiick\Audit\Actions\CleanActivityLogAction'
   'Qiick\Audit\Console\Commands\PurgeActivityLogCommand'

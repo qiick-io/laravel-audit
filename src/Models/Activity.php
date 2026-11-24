@@ -20,7 +20,8 @@ use Spatie\Activitylog\Models\Activity as SpatieActivity;
  *
  * Extends Spatie's model, so Spatie's logger, relations and scopes keep
  * working. The bigint `id` stays internal; `public_id` (UUID v7, RFC 9562) is
- * the id resources and exports expose. Products may extend this class and
+ * the id resources and exports expose; serialisation hides `id` and writes
+ * timestamps as RFC 3339 UTC (`2026-11-24T10:30:15.000000Z`). Products may extend this class and
  * must keep extending it.
  *
  * The morph relations and scopes read their id columns from `audit.columns`
@@ -48,6 +49,18 @@ class Activity extends SpatieActivity
     public static function currentSchemaVersion(): int
     {
         return 1;
+    }
+
+    /**
+     * The bigint never leaves the database (design §3): serialised rows,
+     * resources and exports carry public_id. Kept out even after
+     * makeVisible('id').
+     *
+     * @return array<string>
+     */
+    public function getHidden(): array
+    {
+        return [...parent::getHidden(), 'id'];
     }
 
     /**

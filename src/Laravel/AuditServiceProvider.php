@@ -108,6 +108,9 @@ final class AuditServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->useThePackageModelAndAction();
+
+        (new AuditBootChecks($this->app->make('config'), $this->app->isProduction()))->assert();
+
         $this->scheduleTheRetentionPurge();
 
         // Spatie binds its logger in register(); binding at boot replaces it

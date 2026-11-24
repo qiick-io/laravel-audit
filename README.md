@@ -239,6 +239,23 @@ super-admin, through an unscoped query the product guards. `causedBy`,
 `forSubject` and `activitiesAsSubject()` do not filter by organisation: a
 tenant page always adds `forOrganisation()`.
 
+## Boot checks
+
+The application does not boot when:
+
+- `activitylog.activity_model` does not extend `Qiick\Audit\Models\Activity`,
+  or `activitylog.actions.log_activity` does not extend
+  `Qiick\Audit\Actions\LogActivityAction` (it writes the attribution);
+- `app.timezone` is not `UTC`;
+- in production, `activitylog.enabled` is not `true` or
+  `activitylog.buffer.enabled` is not `false` (security events must not be
+  turned off or lost by one env variable).
+
+Serialised rows never carry the bigint `id`; timestamps are RFC 3339 UTC.
+The security checklist maps every design risk to its tests:
+[docs/security-checklist.md](./docs/security-checklist.md). Adopting the
+package in a product: [UPGRADING.md](./UPGRADING.md).
+
 ## Deprecation policy
 
 This package follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) (SemVer):
