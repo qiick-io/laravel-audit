@@ -11,11 +11,11 @@ use Illuminate\Support\Facades\Schema;
 use Qiick\Audit\Models\Activity;
 use Qiick\Audit\Tests\Support\CreatesKeyedRecordTables;
 use Qiick\Audit\Tests\Support\Models\AuditedIntegerRecord;
-use Qiick\Audit\Tests\Support\Models\AuthenticatableRecord;
 use Qiick\Audit\Tests\Support\Models\IntegerKeyedRecord;
 use Qiick\Audit\Tests\Support\Models\UuidKeyedRecord;
 use Qiick\Audit\Tests\Support\PackageTestCase;
 use Spatie\Activitylog\Support\ActivityLogger;
+use Spatie\Activitylog\Support\CauserResolver;
 
 /**
  * Design §6.3: with audit.columns pointing at subject_ref / causer_ref (the
@@ -82,7 +82,7 @@ final class RenamedMorphColumnsTest extends PackageTestCase
     public function test_a_causer_set_on_the_activity_is_not_replaced_by_the_default_causer(): void
     {
         $presetCauser = IntegerKeyedRecord::query()->create(['name' => 'preset']);
-        $this->actingAs(AuthenticatableRecord::query()->create(['name' => 'signed in']));
+        app(CauserResolver::class)->setCauser(IntegerKeyedRecord::query()->create(['name' => 'default causer']));
 
         ActivityLogger::macro('presetCauserForTest', function ($causer) {
             /** @var ActivityLogger $this */
@@ -99,17 +99,17 @@ final class RenamedMorphColumnsTest extends PackageTestCase
 
     public function test_the_default_causer_is_used_when_none_is_set(): void
     {
-        $signedInUser = AuthenticatableRecord::query()->create(['name' => 'signed in']);
-        $this->actingAs($signedInUser);
+        $defaultCauser = IntegerKeyedRecord::query()->create(['name' => 'default causer']);
+        app(CauserResolver::class)->setCauser($defaultCauser);
 
         activity()->log('default causer');
 
-        $this->assertSame((string) $signedInUser->getKey(), DB::table('activity_log')->value('causer_ref'));
+        $this->assertSame((string) $defaultCauser->getKey(), DB::table('activity_log')->value('causer_ref'));
     }
 
     public function test_an_anonymous_causer_stays_anonymous(): void
     {
-        $this->actingAs(AuthenticatableRecord::query()->create(['name' => 'signed in']));
+        app(CauserResolver::class)->setCauser(IntegerKeyedRecord::query()->create(['name' => 'default causer']));
 
         activity()->causedByAnonymous()->log('anonymous');
 
@@ -121,7 +121,7 @@ final class RenamedMorphColumnsTest extends PackageTestCase
         config()->set('activitylog.activity_model', \Spatie\Activitylog\Models\Activity::class);
 
         $this->expectException(\LogicException::class);
-        $this->expectExceptionMessage('activitylog.activity_model must extend '.Activity::class.'.');
+        $this->expectExceptionMessage('The activity logger needs an activity model that extends '.Activity::class.'.');
 
         activity()->log('spatie model');
     }

@@ -30,7 +30,7 @@ class ActivityLogger extends SpatieActivityLogger
         }
 
         if (! $activity instanceof Activity) {
-            throw new LogicException('activitylog.activity_model must extend '.Activity::class.'.');
+            throw new LogicException('The activity logger needs an activity model that extends '.Activity::class.'.');
         }
 
         if ($activity->getAttribute(Activity::idColumn('causer_id')) !== null) {

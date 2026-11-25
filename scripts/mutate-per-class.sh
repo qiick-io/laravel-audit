@@ -12,7 +12,14 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 # Every class with behaviour is a target; populated as feature PRs land.
+# NullOrganisationResolver is not listed: it only returns null, so pest
+# creates no mutant for it.
 CLASSES=(
+  'Qiick\Audit\Audit'
+  'Qiick\Audit\AuditContext'
+  'Qiick\Audit\Contracts\AuditActor'
+  'Qiick\Audit\Resolvers\RequestAttributeActorResolver'
+  'Qiick\Audit\Support\ActivityAttributor'
   'Qiick\Audit\Concerns\LogsActivity'
   'Qiick\Audit\Relations\StringKeyedMorphMany'
   'Qiick\Audit\Support\ActivityLogger'

@@ -7,7 +7,9 @@ namespace Qiick\Audit\Actions;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
+use LogicException;
 use Qiick\Audit\Models\Activity;
+use Qiick\Audit\Support\ActivityAttributor;
 use Qiick\Audit\Support\SecretAttributeFloor;
 use Spatie\Activitylog\Actions\LogActivityAction as SpatieLogActivityAction;
 
@@ -19,7 +21,9 @@ use Spatie\Activitylog\Actions\LogActivityAction as SpatieLogActivityAction;
  * that path (design §6.3 spike). The action fills the model's unique ids
  * before either path stores the row.
  *
- * It redacts secret values in attribute_changes, resolves description
+ * It writes the server-side attribution last, after every product
+ * beforeLogging callback (ActivityAttributor), so the server always wins. It
+ * redacts secret values in attribute_changes, resolves description
  * placeholders through the secret floor, and replaces any public_id a
  * caller set.
  *
@@ -31,6 +35,12 @@ class LogActivityAction extends SpatieLogActivityAction
 {
     protected function save(Model $activity): void
     {
+        if (! $activity instanceof Activity) {
+            throw new LogicException('activitylog.activity_model must extend '.Activity::class.'.');
+        }
+
+        app(ActivityAttributor::class)->attribute($activity);
+
         // Server wins: a public_id a caller set through tap() is replaced.
         $activity->setAttribute('public_id', null);
         $activity->setUniqueIds();
