@@ -429,3 +429,32 @@ it('scrubs ip_address by default (review)', function (): void {
         'actor_kind' => 'unattended',
     ]);
 });
+
+it('reports the erasure only once the caller\'s transaction commits (review M1)', function (): void {
+    Event::fake([ActivityAnonymised::class]);
+    $person = personToErase();
+    logAbout($person, null, 'logged in', ['email' => 'ada@example.com']);
+
+    DB::transaction(function () use ($person): void {
+        expect(anonymise($person))->toBe(1);
+
+        Event::assertNotDispatched(ActivityAnonymised::class);
+    });
+
+    Event::assertDispatchedTimes(ActivityAnonymised::class, 1);
+});
+
+it('never reports an erasure the caller\'s transaction rolled back (review M1)', function (): void {
+    Event::fake([ActivityAnonymised::class]);
+    $person = personToErase();
+    $activity = logAbout($person, null, 'logged in', ['email' => 'ada@example.com']);
+
+    expect(fn () => DB::transaction(function () use ($person): void {
+        anonymise($person);
+
+        throw new RuntimeException('the user tombstone failed');
+    }))->toThrow(RuntimeException::class, 'the user tombstone failed');
+
+    Event::assertNotDispatched(ActivityAnonymised::class);
+    expect(Activity::query()->findOrFail($activity->getKey())->getProperty('email'))->toBe('ada@example.com');
+});

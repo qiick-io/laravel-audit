@@ -206,6 +206,27 @@ the product's `OrganisationResolver` binding (default: none). `request_id`
 comes from the `request_id` key of Laravel's context, which
 `qiick/laravel-http-basics` sets.
 
+## Transactions
+
+- **A logged row joins the ambient transaction**, as Spatie's does: the row is
+  written with the business change it describes, and it rolls back with it.
+  The log never says that a change happened when it did not.
+- **Evidence of an attempt that fails** (a rejected privilege change, a
+  refused delete) is therefore lost if it is logged inside the transaction
+  that rolls back. Log such attempts outside it: before `DB::transaction()`
+  starts, or in the failure path after it has rolled back
+  (`catch (Throwable $exception) { activity('security')->...->log(...); throw $exception; }`).
+- **Buffered logging** (`activitylog.buffer.enabled`), which writes after the
+  response, is refused in production by a boot check: buffered security
+  events are lost when the process dies.
+- **Erasure joins the caller's transaction too**, as a savepoint, and
+  `ActivityAnonymised` is dispatched only after the outermost commit: when the
+  product's erasure transaction rolls back, the anonymisation is undone and no
+  listener hears of it.
+- **The retention purge** deletes in chunks, each its own statement, without
+  a transaction of its own: a run that stops halfway leaves only rows that
+  the next run deletes.
+
 ## Erasure (GDPR)
 
 The product's erasure job calls the anonymiser in the same transaction as the

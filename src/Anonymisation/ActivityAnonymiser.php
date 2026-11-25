@@ -100,7 +100,9 @@ final class ActivityAnonymiser implements AuditAnonymiser
                 });
         });
 
-        event(new ActivityAnonymised($anonymisedRows, $subject->refs));
+        // After the outermost commit: when the product's erasure transaction
+        // rolls back, the anonymisation is undone and nothing is reported.
+        $connection->afterCommit(fn () => event(new ActivityAnonymised($anonymisedRows, $subject->refs)));
 
         return new AnonymisationReport($anonymisedRows);
     }

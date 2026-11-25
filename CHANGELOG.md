@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `ActivityAnonymised` is dispatched after the outermost transaction commits:
+  an erasure the product's transaction rolled back is no longer reported
+  (RC review M1). The README documents the transaction behaviour of logging,
+  erasure and the purge (M2).
+
 ### Added
 
 - `docs/public-api.md` lists the public API (classes, config keys, commands,

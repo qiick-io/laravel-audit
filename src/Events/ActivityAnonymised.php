@@ -8,7 +8,8 @@ use Qiick\Audit\Contracts\MorphRef;
 
 /**
  * Dispatched after every erasure, with the number of rows it anonymised, so
- * the product can report it (design §4).
+ * the product can report it (design §4). It is dispatched after the outermost
+ * transaction commits, so a rolled-back erasure is never reported.
  *
  * @api
  */
