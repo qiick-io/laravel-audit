@@ -85,3 +85,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the `auth` log), CI on PHP 8.4 / 8.5 × Laravel 12 / 13 (lowest and stable),
   the suite on SQLite, PostgreSQL, MySQL and MariaDB, sharded per-class
   mutation, and the qiick standards pack.
+
+### Documentation
+
+- Dependency register `docs/dependencies.md`: one row per runtime
+  `composer.json` `require` entry with constraint rationale, usage,
+  maintainer, license, known risk and an in-package exit plan.
