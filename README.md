@@ -224,10 +224,56 @@ $report = app(AuditAnonymiser::class)->anonymise(new ErasureSubject(
 ```
 
 Matching rows keep their event, log name, timestamps and morphs; their
-personal keys, the identifiers (as whole words) and any email address or phone-like sequence
-become the tombstone, and `anonymised_at` is set. A second run reports
-`0` rows. The tombstone must not contain an identifier or look like an email
-address or a phone number.
+personal keys, the identifiers (as whole words) and any email address or
+phone-like sequence become the tombstone, and `anonymised_at` is set. A second
+run reports `0` rows. The tombstone must not contain an identifier or look
+like an email address or a phone number.
+
+The fleet-standard `AuditEraser` (one `erase()` shape for every qiick package)
+arrives before 1.0, once the fleet conformance suite is merged; until then the
+anonymiser is the entry point (`docs/decisions/2026-11-25-standard-eraser-after-conformance.md`).
+
+### Erasure perimeter and caller duties
+
+The anonymiser erases what it can recognise, and no more. Calling it is one
+step of an Art. 17 erasure, not the whole of it.
+
+**What it covers**
+
+- Rows where one of the `refs` is the **causer or the subject**, matched by
+  stored morph type and id (`audit.columns` honoured). Pass every model that
+  identifies the person: user, principals, API keys. Rows written before the
+  product set a morph map store the class name: pass both refs (UPGRADING).
+- In those rows: the personal keys at any depth of `properties` and
+  `attribute_changes`, in any spelling (`ip`, `ip_address`, `user_agent`,
+  `email`, `username`, `name`, `first_name`, `last_name`, plus
+  `audit.personal_keys`); every `identifiers` value as a whole word; every
+  email address and phone-like sequence (8–15 digits) in any string and in
+  `description`.
+
+**What it does not cover**
+
+- **Other people's rows.** A row caused by an admin about another subject that
+  mentions the person in free text (`description` or a property) is outside
+  the perimeter: only causer and subject are matched.
+- **Free text the patterns do not recognise.** A postal address, a date of
+  birth, a nickname not in `identifiers`, or a phone number stored as a JSON
+  number survives unless its key is a personal key.
+- **Unlisted property keys.** A personal value under a key that is not a
+  personal key and is not email- or phone-shaped stays.
+- **Rows written after the run** (the anonymiser is one pass over the rows it
+  finds); run it after the account is deactivated, and run it again if needed:
+  it is idempotent.
+- Application logs, queues and backups.
+
+**What the product must do**
+
+1. Keep personal data out of `description`: put it in properties under keys
+   the anonymiser knows, or add the product's keys to `audit.personal_keys`.
+2. Pass every `refs` and every `identifiers` value the person is known by.
+3. Deactivate the account first, then anonymise, so no new row about the
+   person is written during the erasure.
+4. Erase or anonymise the product's own tables, logs and backups.
 
 ## Retention
 

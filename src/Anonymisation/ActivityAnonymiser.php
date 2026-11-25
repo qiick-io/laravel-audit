@@ -38,6 +38,8 @@ use UnexpectedValueException;
  * 0 rows, while a row anonymised earlier for someone else is still scrubbed
  * for this subject. Rows are read lazily in chunks by id, inside one
  * transaction.
+ *
+ * @api The default AuditAnonymiser binding.
  */
 final class ActivityAnonymiser implements AuditAnonymiser
 {

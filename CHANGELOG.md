@@ -10,6 +10,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `docs/public-api.md` lists the public API (classes, config keys, commands,
+  events, migrations, formats), with an architecture test that every
+  declaration is `@api` or `@internal` and every `@api` one is listed;
+  `docs/reference-schema.md` documents the `activity_log` columns and indexes;
+  the dependency register describes the purge command it now ships; the README
+  states the erasure perimeter and the caller's duties;
+  `docs/decisions/2026-11-25-standard-eraser-after-conformance.md` records that
+  the fleet-standard `AuditEraser` lands after the conformance suite, before
+  1.0 (beta.1 ships `AuditAnonymiser` only).
+
+### Added
+
 - Boot checks (design §4): the activity model, the logging action and the
   clean action must extend the package's, `app.timezone` must be `UTC` (A13), and in production
   the log must be enabled and unbuffered (A9). `Models\Activity` never
@@ -29,9 +41,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `security`, `access`, `api-keys`), all kept 730 days; it replaces
   `audit.security_log_name`. Log names are stored trimmed and lower-cased, so
   the floors match on every engine.
-- Retention (Luca, 2026-11-23): `audit:purge` deletes rows outside the `auth`
-  security log older than `audit.retention_days` (365), then `auth` rows older
-  than `audit.security_retention_days` (730), in chunks of
+- Retention (Luca, 2026-11-23): `audit:purge` deletes rows outside the
+  security logs older than `audit.retention_days` (365), then security log
+  rows older than `audit.security_retention_days` (730), in chunks of
   `audit.purge.chunk_size` ids. The provider schedules it daily at
   `audit.purge.time` (03:00 UTC) unless `audit.purge.schedule` is false,
   and feeds `audit.retention_days` to `activitylog.clean_after_days`. Misconfigured floors (zero, negative, a
