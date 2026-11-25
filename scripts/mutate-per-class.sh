@@ -15,6 +15,9 @@ cd "$ROOT"
 # NullOrganisationResolver is not listed: it only returns null, so pest
 # creates no mutant for it.
 CLASSES=(
+  'Qiick\Audit\Support\RetentionPurger'
+  'Qiick\Audit\Actions\CleanActivityLogAction'
+  'Qiick\Audit\Console\Commands\PurgeActivityLogCommand'
   'Qiick\Audit\Anonymisation\ActivityAnonymiser'
   'Qiick\Audit\Contracts\ErasureSubject'
   'Qiick\Audit\Contracts\MorphRef'

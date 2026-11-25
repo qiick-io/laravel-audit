@@ -10,6 +10,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Spatie's `activitylog:clean` goes through the two retention floors: the
+  package's `Actions\CleanActivityLogAction` is the configured clean action,
+  so no path (not even `--days=1`) deletes a row younger than its floor; the
+  warning on `activitylog:clean` is gone (analysis AU-l).
+- Security logs are a list, `audit.security_log_names` (default `auth`,
+  `security`, `access`, `api-keys`), all kept 730 days; it replaces
+  `audit.security_log_name`. Log names are stored trimmed and lower-cased, so
+  the floors match on every engine.
+- Retention (Luca, 2026-11-23): `audit:purge` deletes rows outside the `auth`
+  security log older than `audit.retention_days` (365), then `auth` rows older
+  than `audit.security_retention_days` (730), in chunks of
+  `audit.purge.chunk_size` ids. The provider schedules it daily at
+  `audit.purge.time` (03:00 UTC) unless `audit.purge.schedule` is false,
+  and feeds `audit.retention_days` to `activitylog.clean_after_days`. Misconfigured floors (zero, negative, a
+  security floor shorter than the general one) fail the command and delete
+  nothing.
 - Erasure replaces identifiers as whole words only (`Al` no longer corrupts
   `Alarm`) and scrubs `ip_address` by default.
 - Erasure matches personal keys in any spelling (`firstName`, `last-name`,

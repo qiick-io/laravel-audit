@@ -47,11 +47,15 @@ return [
 
     /*
      * Retention (Luca, 2026-11-23): every log is kept 365 days, the security
-     * log 730 days. The daily `audit:purge` deletes in two chunked passes so
-     * the two floors cannot be conflated.
+     * logs 730 days. Which logs hold security events is a list (Team Leader
+     * bot, 2026-11-24, applying Luca's "security events two years"); log
+     * names compare in lower case. The daily `audit:purge` deletes in two chunked passes so
+     * the two floors cannot be conflated. retention_days also feeds Spatie's
+     * activitylog.clean_after_days, and Spatie's activitylog:clean goes
+     * through the same two floors (the package's clean action).
      */
     'retention_days' => 365,
-    'security_log_name' => 'auth',
+    'security_log_names' => ['auth', 'security', 'access', 'api-keys'],
     'security_retention_days' => 730,
 
     'purge' => [
@@ -61,6 +65,12 @@ return [
          * `audit:purge` itself.
          */
         'schedule' => true,
+
+        /* When the scheduled purge runs, every day, in UTC (HH:MM). */
+        'time' => '03:00',
+
+        /* Rows deleted per statement, so no delete locks the whole table. */
+        'chunk_size' => 1000,
     ],
 
     'migrations' => [

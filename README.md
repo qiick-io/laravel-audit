@@ -56,9 +56,11 @@ php artisan vendor:publish --tag=audit-config
 | `audit.personal_keys` | `[]` | extra property keys the anonymiser scrubs |
 | `audit.user_agent_max` | `512` | stored user agent length |
 | `audit.retention_days` | `365` | general retention floor |
-| `audit.security_log_name` | `auth` | the security log, kept longer |
-| `audit.security_retention_days` | `730` | security log retention floor |
+| `audit.security_log_names` | `auth`, `security`, `access`, `api-keys` | the security logs, kept longer |
+| `audit.security_retention_days` | `730` | security logs retention floor |
 | `audit.purge.schedule` | `true` | the provider schedules the purge daily |
+| `audit.purge.time` | `03:00` | when the scheduled purge runs, UTC |
+| `audit.purge.chunk_size` | `1000` | rows deleted per statement |
 | `audit.migrations.load` | `true` | load the package's `activity_log` migration |
 | `audit.columns` | `subject_id` / `causer_id` | morph id columns (externa 1.x only changes them) |
 
@@ -209,6 +211,24 @@ personal keys, the identifiers (as whole words) and any email address or phone-l
 become the tombstone, and `anonymised_at` is set. A second run reports
 `0` rows. The tombstone must not contain an identifier or look like an email
 address or a phone number.
+
+## Retention
+
+Every log is kept 365 days, and the security logs 730 days: `auth`,
+`security`, `access` and `api-keys` by default (`audit.security_log_names`),
+because security events are kept two years. Log names are stored trimmed and
+in lower case, so `Auth` and `auth` are one log on every engine.
+`php artisan audit:purge` deletes in two passes on `created_at`: rows outside
+the security logs past `audit.retention_days`, then security log rows past
+`audit.security_retention_days`. The provider schedules it daily at
+`audit.purge.time` (UTC); a product that runs it itself sets
+`audit.purge.schedule` to `false`.
+
+Spatie's `activitylog:clean` goes through the same two floors: the package
+sets `activitylog.actions.clean_log` to its own clean action, so
+`activitylog:clean --days=1` (or a named log) never deletes a row younger than
+365 days, or a security log row younger than 730. A product that keeps it in the
+schedule loses nothing; `audit:purge` alone is enough.
 
 ## Querying
 

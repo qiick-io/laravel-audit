@@ -12,7 +12,7 @@ it('is registered by the test app', function (): void {
 it('merges the design defaults under the audit key', function (): void {
     expect(config('audit.user_agent_max'))->toBe(512)
         ->and(config('audit.retention_days'))->toBe(365)
-        ->and(config('audit.security_log_name'))->toBe('auth')
+        ->and(config('audit.security_log_names'))->toBe(['auth', 'security', 'access', 'api-keys'])
         ->and(config('audit.security_retention_days'))->toBe(730)
         ->and(config('audit.purge.schedule'))->toBeTrue()
         ->and(config('audit.migrations.load'))->toBeTrue()
