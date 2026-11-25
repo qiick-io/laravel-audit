@@ -5,9 +5,11 @@ declare(strict_types=1);
 use Illuminate\Console\Scheduling\Event as ScheduledEvent;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Database\Events\QueryExecuted;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Qiick\Audit\Support\RetentionPurger;
 
@@ -96,4 +98,99 @@ it('schedules the purge on one server and without overlapping runs', function ()
     expect($purgeEvent)->not->toBeNull()
         ->and($purgeEvent->withoutOverlapping)->toBeTrue()
         ->and($purgeEvent->onOneServer)->toBeTrue();
+});
+
+it('reads the ids to delete from the write connection, so a stale replica cannot stall the purge (Codex review)', function (): void {
+    $readerPath = tempnam(sys_get_temp_dir(), 'audit-reader');
+    $writerPath = tempnam(sys_get_temp_dir(), 'audit-writer');
+    config()->set('database.connections.split', [
+        'driver' => 'sqlite',
+        'read' => ['database' => $readerPath],
+        'write' => ['database' => $writerPath],
+        'sticky' => false,
+        'prefix' => '',
+    ]);
+
+    // The replica still holds rows the writer has already deleted.
+    foreach (['reader' => $readerPath, 'writer' => $writerPath] as $endpoint => $path) {
+        config()->set("database.connections.split_{$endpoint}", ['driver' => 'sqlite', 'database' => $path, 'prefix' => '']);
+        Schema::connection("split_{$endpoint}")->create('activity_log', function (Blueprint $table): void {
+            $table->id();
+            $table->string('log_name')->nullable();
+            $table->dateTime('created_at');
+        });
+    }
+
+    foreach (range(1, 4) as $row) {
+        DB::connection('split_reader')->table('activity_log')->insert(['log_name' => 'default', 'created_at' => now('UTC')->subDays(400)]);
+    }
+
+    DB::connection('split_writer')->table('activity_log')->insert(['log_name' => 'default', 'created_at' => now('UTC')->subDays(400)]);
+
+    $selects = 0;
+    Event::listen(QueryExecuted::class, function (QueryExecuted $query) use (&$selects): void {
+        if ($query->connectionName === 'split' && str_starts_with(strtolower($query->sql), 'select') && ++$selects > 10) {
+            throw new RuntimeException('The purge kept reading rows that were already deleted.');
+        }
+    });
+
+    $defaultConnection = DB::getDefaultConnection();
+    DB::setDefaultConnection('split');
+
+    try {
+        $purge = RetentionPurger::fromConfig(config())->purge(365);
+    } finally {
+        DB::setDefaultConnection($defaultConnection);
+        @unlink($readerPath);
+        @unlink($writerPath);
+    }
+
+    expect($purge['general'])->toBe(1)
+        ->and(DB::connection('split_writer')->table('activity_log')->count())->toBe(0);
+});
+
+it('honours both floors and finishes when two sessions purge the same rows (Codex review)', function (): void {
+    if (DB::getDriverName() === 'sqlite') {
+        $this->markTestSkipped('Needs two sessions on a server engine.');
+    }
+
+    $defaultConnection = DB::getDefaultConnection();
+    config()->set('database.connections.second_session', config("database.connections.{$defaultConnection}"));
+    DB::purge('second_session');
+
+    $generalOld = [];
+    $securityOld = [];
+
+    foreach (range(1, 7) as $row) {
+        $generalOld[] = insertConcurrencyRow('default', 400);
+        $securityOld[] = insertConcurrencyRow('auth', 800);
+    }
+
+    $kept = [insertConcurrencyRow('default', 10), insertConcurrencyRow('auth', 400), insertConcurrencyRow('security', 700)];
+    $secondSession = null;
+    $hasInterleaved = false;
+
+    Event::listen(QueryExecuted::class, function (QueryExecuted $query) use (&$hasInterleaved, &$secondSession, $defaultConnection): void {
+        if ($hasInterleaved || $query->connectionName !== $defaultConnection || ! str_starts_with(strtolower($query->sql), 'select')) {
+            return;
+        }
+
+        $hasInterleaved = true;
+
+        // The first session has read its first ids; another session purges everything now.
+        DB::setDefaultConnection('second_session');
+
+        try {
+            $secondSession = RetentionPurger::fromConfig(config())->purge(365);
+        } finally {
+            DB::setDefaultConnection($defaultConnection);
+        }
+    });
+
+    $firstSession = RetentionPurger::fromConfig(config())->purge(365);
+
+    expect(DB::table('activity_log')->orderBy('id')->pluck('id')->map(fn (mixed $id): int => (int) $id)->all())->toBe($kept)
+        ->and($firstSession['general'] + $secondSession['general'])->toBe(count($generalOld))
+        ->and($firstSession['security'] + $secondSession['security'])->toBe(count($securityOld))
+        ->and($secondSession['general'])->toBe(count($generalOld));
 });

@@ -132,7 +132,9 @@ final readonly class RetentionPurger
         $deletedRows = 0;
 
         do {
-            $query = $connection->table($table)->where('created_at', '<', $storedCutoff);
+            // From the writer: a lagging read replica would keep returning rows
+            // already deleted, and the loop would never finish.
+            $query = $connection->table($table)->useWritePdo()->where('created_at', '<', $storedCutoff);
             $scopeToLogs($query);
             $ids = $query->orderBy('id')->limit($this->chunkSize)->pluck('id')->all();
 
