@@ -21,7 +21,9 @@ use Qiick\Audit\Models\Activity;
  * a row younger than its floor: a shorter age asked by a caller is raised to
  * the floor. Each pass deletes in chunks of `audit.purge.chunk_size` ids, so
  * no statement locks the whole table; the ids are read first because MySQL
- * refuses a DELETE whose subquery reads the same table.
+ * refuses a DELETE whose subquery reads the same table. Two purges may
+ * overlap (the scheduler prevents it, a manual run may not): deletes are
+ * idempotent and recheck the cutoff, so the floors hold either way.
  *
  * @internal
  */
@@ -135,7 +137,12 @@ final readonly class RetentionPurger
             $ids = $query->orderBy('id')->limit($this->chunkSize)->pluck('id')->all();
 
             if ($ids !== []) {
-                $deletedRows += $connection->table($table)->whereIn('id', $ids)->delete();
+                // The cutoff is checked again in the delete itself, so a row that
+                // stopped being past its floor since the ids were read stays.
+                $deletedRows += $connection->table($table)
+                    ->whereIn('id', $ids)
+                    ->where('created_at', '<', $storedCutoff)
+                    ->delete();
             }
         } while (count($ids) === $this->chunkSize);
 

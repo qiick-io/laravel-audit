@@ -74,7 +74,13 @@ final class AuditServiceProvider extends ServiceProvider
                 throw new InvalidArgumentException('audit.purge.time must be a time of day as HH:MM.');
             }
 
-            $schedule->command(PurgeActivityLogCommand::class)->dailyAt($purgeTime)->timezone('UTC');
+            // One run at a time across servers (needs a cache store with locks,
+            // shared by the servers, as Laravel's scheduler always does).
+            $schedule->command(PurgeActivityLogCommand::class)
+                ->dailyAt($purgeTime)
+                ->timezone('UTC')
+                ->withoutOverlapping()
+                ->onOneServer();
         });
     }
 

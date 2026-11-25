@@ -284,8 +284,10 @@ in lower case, so `Auth` and `auth` are one log on every engine.
 `php artisan audit:purge` deletes in two passes on `created_at`: rows outside
 the security logs past `audit.retention_days`, then security log rows past
 `audit.security_retention_days`. The provider schedules it daily at
-`audit.purge.time` (UTC); a product that runs it itself sets
-`audit.purge.schedule` to `false`.
+`audit.purge.time` (UTC), on one server and never overlapping itself (the
+scheduler's cache lock: the servers must share a cache store that supports
+locks); a product that runs it itself sets `audit.purge.schedule` to `false`.
+Overlapping runs are safe anyway: each delete rechecks the cutoff.
 
 Spatie's `activitylog:clean` goes through the same two floors: the package
 sets `activitylog.actions.clean_log` to its own clean action, so

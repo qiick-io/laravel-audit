@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The scheduled purge runs on one server and never overlaps itself
+  (`withoutOverlapping()->onOneServer()`), and each chunk delete checks the
+  cutoff again, so overlapping purges (a manual run during the scheduled one)
+  still delete every old row once and never a row inside its floor (RC review
+  M5).
+
 ### Added
 
 - `docs/public-api.md` lists the public API (classes, config keys, commands,
