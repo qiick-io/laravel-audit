@@ -10,9 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- `ActivityAnonymised` is dispatched after the outermost transaction commits:
-  an erasure the product's transaction rolled back is no longer reported
-  (RC review M1). The README documents the transaction behaviour of logging,
+- `ActivityAnonymised` is dispatched after the outermost transaction of the
+  audit connection commits: an erasure the product's transaction rolled back
+  is no longer reported, even when another connection commits meanwhile (RC
+  review M1).
+- Concurrent erasures of two people who share a row no longer write back a
+  name the other one scrubbed: the anonymiser locks the rows it reads. The README documents the transaction behaviour of logging,
   erasure and the purge (M2).
 
 ### Added
@@ -26,9 +29,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `docs/decisions/2026-11-25-standard-eraser-after-conformance.md` records that
   the fleet-standard `AuditEraser` lands after the conformance suite, before
   1.0 (beta.1 ships `AuditAnonymiser` only).
-
-### Added
-
 - Boot checks (design §4): the activity model, the logging action and the
   clean action must extend the package's, `app.timezone` must be `UTC` (A13), and in production
   the log must be enabled and unbuffered (A9). `Models\Activity` never

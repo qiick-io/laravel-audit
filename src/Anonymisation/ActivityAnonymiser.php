@@ -92,17 +92,24 @@ final class ActivityAnonymiser implements AuditAnonymiser
                             ->orWhere(fn (Builder $refQuery) => $refQuery->where('causer_type', $ref->type)->where($causerIdColumn, $ref->id));
                     }
                 })
+                // A row can belong to two people (causer and subject): locking it
+                // makes a concurrent erasure wait for this commit and read the
+                // scrubbed row, instead of writing back its stale copy.
+                ->lockForUpdate()
                 ->lazyById()
                 ->each(function (stdClass $row) use ($activityModel, $connection, $subject, $personalKeys, $identifiers, &$anonymisedRows): void {
                     if ($this->anonymiseRow($row, $activityModel, $connection, $subject->tombstone, $personalKeys, $identifiers)) {
                         $anonymisedRows++;
                     }
                 });
-        });
 
-        // After the outermost commit: when the product's erasure transaction
-        // rolls back, the anonymisation is undone and nothing is reported.
-        $connection->afterCommit(fn () => event(new ActivityAnonymised($anonymisedRows, $subject->refs)));
+            // Registered while this transaction is the open one on the audit
+            // connection, so the event follows that connection's outermost
+            // commit, never a commit on another connection, and is dropped
+            // when the product's erasure transaction rolls back.
+            $finalCount = $anonymisedRows;
+            $connection->afterCommit(fn () => event(new ActivityAnonymised($finalCount, $subject->refs)));
+        });
 
         return new AnonymisationReport($anonymisedRows);
     }

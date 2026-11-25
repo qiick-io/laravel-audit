@@ -458,3 +458,48 @@ it('never reports an erasure the caller\'s transaction rolled back (review M1)',
     Event::assertNotDispatched(ActivityAnonymised::class);
     expect(Activity::query()->findOrFail($activity->getKey())->getProperty('email'))->toBe('ada@example.com');
 });
+
+it('never reports an erasure when another connection commits and the audit connection rolls back (Codex M1)', function (): void {
+    Event::fake([ActivityAnonymised::class]);
+    config()->set('database.connections.unrelated', ['driver' => 'sqlite', 'database' => ':memory:']);
+    $person = personToErase();
+    $activity = logAbout($person, null, 'logged in', ['email' => 'ada@example.com']);
+    $auditConnection = DB::connection();
+    $unrelatedConnection = DB::connection('unrelated');
+
+    $auditConnection->beginTransaction();
+    $unrelatedConnection->beginTransaction();
+
+    anonymise($person);
+
+    $unrelatedConnection->commit();
+
+    Event::assertNotDispatched(ActivityAnonymised::class);
+
+    $auditConnection->rollBack();
+
+    Event::assertNotDispatched(ActivityAnonymised::class);
+    expect(Activity::query()->findOrFail($activity->getKey())->getProperty('email'))->toBe('ada@example.com');
+});
+
+it('reports an erasure once when the audit connection commits with another connection open (Codex M1)', function (): void {
+    Event::fake([ActivityAnonymised::class]);
+    config()->set('database.connections.unrelated', ['driver' => 'sqlite', 'database' => ':memory:']);
+    $person = personToErase();
+    logAbout($person, null, 'logged in', ['email' => 'ada@example.com']);
+    $auditConnection = DB::connection();
+    $unrelatedConnection = DB::connection('unrelated');
+
+    $auditConnection->beginTransaction();
+    $unrelatedConnection->beginTransaction();
+
+    anonymise($person);
+
+    $auditConnection->commit();
+
+    Event::assertDispatchedTimes(ActivityAnonymised::class, 1);
+
+    $unrelatedConnection->rollBack();
+
+    Event::assertDispatchedTimes(ActivityAnonymised::class, 1);
+});
