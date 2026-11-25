@@ -50,21 +50,7 @@ trait LogsActivity
      */
     public function activitiesAsSubject(): MorphMany
     {
-        $activity = Activity::newConfiguredModel();
-
-        // As Laravel's own relations do: the activity row follows the model's
-        // connection unless the activity model names its own.
-        if ($activity->getConnectionName() === null) {
-            $activity->setConnection($this->getConnectionName());
-        }
-
-        return new StringKeyedMorphMany(
-            $activity->newQuery(),
-            $this,
-            $activity->qualifyColumn('subject_type'),
-            $activity->qualifyColumn(Activity::idColumn('subject_id')),
-            $this->getKeyName(),
-        );
+        return StringKeyedMorphMany::ofActivities($this, 'subject');
     }
 
     public function getActivitylogOptions(): LogOptions

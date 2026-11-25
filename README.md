@@ -142,6 +142,23 @@ mistakes, not against product code: `Activity::query()->update()` and
 `->delete()` go through the query builder, which the anonymiser and the purge
 use, and the model cannot stop them. Never write to `activity_log` that way.
 
+### Trust boundary
+
+The package protects the log against mistakes in application code, not
+against code that sets out to change it. Inside the package, a test allows
+query-builder writes to `activity_log` only in the anonymiser and the
+retention purge. The strong guarantee is the database: give the web and
+queue processes a role that can `INSERT` and `SELECT` on `activity_log` but
+not `UPDATE` or `DELETE`, and run `audit:purge` and the erasure job with a
+role that can. Each row's `public_id` and timestamps make tampering visible
+only to someone who compares copies; hash chaining is after 1.0 (design §3).
+
+For models that cause activity, use `Qiick\Audit\Concerns\CausesActivity`
+(or `HasActivity` for both): their `activitiesAsCauser()` / `activities()`
+relations work on PostgreSQL for bigint keys and follow `audit.columns`.
+Never use Spatie's `HasActivity`: it brings Spatie's `LogsActivity` without
+the secret floor.
+
 ## Attribution
 
 Every row the package logs carries server-side attribution, written after
@@ -238,6 +255,26 @@ never returns rows without an organisation: those are for the instance
 super-admin, through an unscoped query the product guards. `causedBy`,
 `forSubject` and `activitiesAsSubject()` do not filter by organisation: a
 tenant page always adds `forOrganisation()`.
+
+## Boot checks
+
+The application does not boot when:
+
+- `activitylog.activity_model` does not extend `Qiick\Audit\Models\Activity`,
+  `activitylog.actions.log_activity` does not extend
+  `Qiick\Audit\Actions\LogActivityAction` (it writes the attribution), or
+  `activitylog.actions.clean_log` does not extend
+  `Qiick\Audit\Actions\CleanActivityLogAction` (it applies the retention
+  floors);
+- `app.timezone` is not `UTC`;
+- in production, `activitylog.enabled` is not `true` or
+  `activitylog.buffer.enabled` is not `false` (security events must not be
+  turned off or lost by one env variable).
+
+Serialised rows never carry the bigint `id`; timestamps are RFC 3339 UTC.
+The security checklist maps every design risk to its tests:
+[docs/security-checklist.md](./docs/security-checklist.md). Adopting the
+package in a product: [UPGRADING.md](./UPGRADING.md).
 
 ## Deprecation policy
 
