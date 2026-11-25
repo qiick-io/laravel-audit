@@ -23,6 +23,14 @@ return [
             'Qiick\Audit\Contracts\AuditActor',
             'Qiick\Audit\Contracts\AuditActorResolver',
             'Qiick\Audit\Contracts\OrganisationResolver',
+            'Qiick\Audit\Contracts\AuditAnonymiser',
+            'Qiick\Audit\Contracts\ErasureSubject',
+            'Qiick\Audit\Contracts\MorphRef',
+            'Qiick\Audit\Contracts\AnonymisationReport',
+        ],
+        'Events' => [
+            // Design §4 names the event ActivityAnonymised.
+            'Qiick\Audit\Events\ActivityAnonymised',
         ],
         'traits' => [
             // Design §4: the trait is Qiick\Audit\Concerns\LogsActivity, the

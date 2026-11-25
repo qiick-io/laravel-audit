@@ -10,6 +10,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Erasure replaces identifiers as whole words only (`Al` no longer corrupts
+  `Alarm`) and scrubs `ip_address` by default.
+- Erasure matches personal keys in any spelling (`firstName`, `last-name`,
+  `Phone Number`), normalised like the secret floor (analysis AU-j).
+- GDPR erasure (design §5): `Contracts\AuditAnonymiser` with `ErasureSubject`,
+  `MorphRef` and `AnonymisationReport`, and the default
+  `Anonymisation\ActivityAnonymiser`. For every row whose causer or subject
+  is one of the person's refs (through `getMorphClass()`, so a morph map is
+  honoured), it puts the tombstone on every personal key of `properties` and
+  `attribute_changes` at any depth (`ip`, `user_agent`, `email`, `username`,
+  `name`, `first_name`, `last_name`, `audit.personal_keys`), replaces the
+  person's identifiers and every email address or phone-like sequence in
+  every string and in `description`, and sets `anonymised_at`. It never
+  deletes a row or changes its event, log, timestamps or morphs; a second run
+  reports 0 rows (A7, A8, A14). `Events\ActivityAnonymised` reports each run.
 - Server-side attribution on every logged row (design §3.1, §4), written by
   the package logging action after every product `beforeLogging` callback:
   the reserved property keys `ip`, `user_agent` (cut to

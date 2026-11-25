@@ -7,8 +7,10 @@ namespace Qiick\Audit\Laravel;
 use Illuminate\Routing\Events\RouteMatched;
 use Illuminate\Support\ServiceProvider;
 use Qiick\Audit\Actions\LogActivityAction;
+use Qiick\Audit\Anonymisation\ActivityAnonymiser;
 use Qiick\Audit\AuditContext;
 use Qiick\Audit\Contracts\AuditActorResolver;
+use Qiick\Audit\Contracts\AuditAnonymiser;
 use Qiick\Audit\Contracts\OrganisationResolver;
 use Qiick\Audit\Models\Activity;
 use Qiick\Audit\Resolvers\NullOrganisationResolver;
@@ -39,6 +41,7 @@ final class AuditServiceProvider extends ServiceProvider
         // bindIf: a product provider that bound its own resolver keeps it.
         $this->app->bindIf(AuditActorResolver::class, RequestAttributeActorResolver::class);
         $this->app->bindIf(OrganisationResolver::class, NullOrganisationResolver::class);
+        $this->app->bindIf(AuditAnonymiser::class, ActivityAnonymiser::class);
     }
 
     /**
