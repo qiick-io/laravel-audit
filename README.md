@@ -229,6 +229,10 @@ phone-like sequence become the tombstone, and `anonymised_at` is set. A second
 run reports `0` rows. The tombstone must not contain an identifier or look
 like an email address or a phone number.
 
+The fleet-standard `AuditEraser` (one `erase()` shape for every qiick package)
+arrives before 1.0, once the fleet conformance suite is merged; until then the
+anonymiser is the entry point (`docs/decisions/2026-11-25-standard-eraser-after-conformance.md`).
+
 ### Erasure perimeter and caller duties
 
 The anonymiser erases what it can recognise, and no more. Calling it is one

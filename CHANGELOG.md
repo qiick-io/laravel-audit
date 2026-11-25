@@ -15,7 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   declaration is `@api` or `@internal` and every `@api` one is listed;
   `docs/reference-schema.md` documents the `activity_log` columns and indexes;
   the dependency register describes the purge command it now ships; the README
-  states the erasure perimeter and the caller's duties.
+  states the erasure perimeter and the caller's duties;
+  `docs/decisions/2026-11-25-standard-eraser-after-conformance.md` records that
+  the fleet-standard `AuditEraser` lands after the conformance suite, before
+  1.0 (beta.1 ships `AuditAnonymiser` only).
 
 ### Added
 
