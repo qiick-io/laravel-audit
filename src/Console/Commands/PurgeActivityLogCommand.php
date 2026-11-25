@@ -17,6 +17,8 @@ use Qiick\Audit\Support\RetentionPurger;
  *    audit.security_log_names`) older than `audit.retention_days` (365);
  * 2. rows of the security logs older than `audit.security_retention_days`
  *    (730).
+ *
+ * @internal The command name `audit:purge` is the public surface, not the class.
  */
 final class PurgeActivityLogCommand extends Command
 {

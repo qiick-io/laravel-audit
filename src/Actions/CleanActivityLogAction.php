@@ -15,6 +15,8 @@ use Spatie\Activitylog\Actions\CleanActivityLogAction as SpatieCleanActivityLogA
  * that still schedules it would delete the security log after 365 days, or
  * after one with `--days=1`. Here the cutoff is never below the floor of the
  * log it applies to.
+ *
+ * @api A product may extend it; boot fails unless the configured action does.
  */
 class CleanActivityLogAction extends SpatieCleanActivityLogAction
 {

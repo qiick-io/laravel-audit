@@ -31,6 +31,8 @@ use Spatie\Activitylog\Actions\LogActivityAction as SpatieLogActivityAction;
  * It also writes `schema_version` itself rather than relying on the column
  * default: externa's adopted table defaults to `0` (legacy rows), and every
  * row this package writes is the current format (design §3.1, §6.2).
+ *
+ * @api A product may extend it; boot fails unless the configured action does.
  */
 class LogActivityAction extends SpatieLogActivityAction
 {
