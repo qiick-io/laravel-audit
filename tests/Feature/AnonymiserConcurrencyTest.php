@@ -69,7 +69,7 @@ it('never restores a name another erasure scrubbed while both run in separate se
     $hasInterleaved = false;
 
     Event::listen(QueryExecuted::class, function (QueryExecuted $query) use (&$hasInterleaved, &$secondSessionOutcome, $eraseGrace, $defaultConnection): void {
-        if ($hasInterleaved || $query->connectionName !== $defaultConnection || ! str_contains($query->sql, 'select') || ! str_contains($query->sql, 'activity_log')) {
+        if ($hasInterleaved || $query->connectionName !== $defaultConnection || ! str_contains($query->sql, 'for update') || ! str_contains($query->sql, 'activity_log')) {
             return;
         }
 

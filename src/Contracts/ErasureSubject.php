@@ -9,9 +9,9 @@ use InvalidArgumentException;
 /**
  * The data subject whose audit data an erasure anonymises (design §4, §5).
  *
- * The tombstone is the product's unique tombstone for this person (C17); it
- * replaces every personal value. It must not contain an identifier, or each
- * run would find the identifier again and erasure would never settle.
+ * The tombstone replaces each personal value. Replacing a whole word inside
+ * the tombstone would expand it on every run. Replacing the entire tombstone
+ * with itself is safe.
  *
  * @api
  */
@@ -37,9 +37,15 @@ final readonly class ErasureSubject
                 throw new InvalidArgumentException('An identifier must be a non-empty string.');
             }
 
-            if (mb_stripos($tombstone, $identifier) !== false) {
+            if (preg_match(self::identifierPattern($identifier), $tombstone, $matches) === 1 && $matches[0] !== $tombstone) {
                 throw new InvalidArgumentException('The tombstone must not contain an identifier, or erasure would never settle.');
             }
         }
+    }
+
+    /** @internal Match identifiers at the same boundaries in validation and scrubbing. */
+    public static function identifierPattern(string $identifier): string
+    {
+        return '/(?<![\p{L}\p{N}])'.preg_quote($identifier, '/').'(?![\p{L}\p{N}])/iu';
     }
 }

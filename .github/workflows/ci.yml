@@ -112,9 +112,10 @@ jobs:
             options: >-
               -e MYSQL_ALLOW_EMPTY_PASSWORD=yes -e MYSQL_DATABASE=laravel_audit
               --health-cmd="mysqladmin ping -h 127.0.0.1" --health-interval=5s --health-retries=20
+          # Preserve the existing required check context when upgrading its service.
           - name: MariaDB 10.11
             connection: mariadb
-            image: mariadb:10.11
+            image: mariadb:11.4@sha256:a8992b5e5404d11e03c54a31d0c1bdea3fd116d283aa6d1a627551f29045309b
             port: 3306
             options: >-
               -e MARIADB_ALLOW_EMPTY_ROOT_PASSWORD=yes -e MARIADB_DATABASE=laravel_audit
@@ -133,6 +134,13 @@ jobs:
         ports:
           - ${{ matrix.database.port }}:${{ matrix.database.port }}
         options: ${{ matrix.database.options }}
+    env:
+      DB_CONNECTION: ${{ matrix.database.connection }}
+      DB_HOST: 127.0.0.1
+      DB_PORT: ${{ matrix.database.port }}
+      DB_DATABASE: ${{ matrix.database.connection == 'sqlite' && ':memory:' || 'laravel_audit' }}
+      DB_USERNAME: ${{ matrix.database.connection == 'pgsql' && 'postgres' || 'root' }}
+      DB_PASSWORD: ''
     steps:
       - name: Checkout
         # actions/checkout@v4.2.2
@@ -151,14 +159,9 @@ jobs:
         run: composer update --no-interaction --prefer-dist --with-all-dependencies
 
       - name: Pest
-        env:
-          DB_CONNECTION: ${{ matrix.database.connection }}
-          DB_HOST: 127.0.0.1
-          DB_PORT: ${{ matrix.database.port }}
-          DB_DATABASE: ${{ matrix.database.connection == 'sqlite' && ':memory:' || 'laravel_audit' }}
-          DB_USERNAME: ${{ matrix.database.connection == 'pgsql' && 'postgres' || 'root' }}
-          DB_PASSWORD: ''
         run: vendor/bin/pest
+
+      - run: node tests/Erasure/run.mjs
 
   # One pest --mutate invocation per class (pcov, no --covered-only, no
   # || true), split round-robin across parallel shards so no job runs near its
@@ -208,8 +211,8 @@ jobs:
         run: test "${{ needs.mutation-shards.result }}" = "success"
 
   standards:
-    # qiick-io/app-ui@v0.12.0
-    uses: qiick-io/app-ui/.github/workflows/drift-check.yml@f613af9febfce3b6d7f7f41785e9845a610080c7 # v0.12.0
+    # qiick-io/app-ui@v0.15.0
+    uses: qiick-io/app-ui/.github/workflows/drift-check.yml@0d97ae1429a856411c76e6de1ec258cae0eabab6 # v0.15.0
     with:
       standards: true
       registry: false

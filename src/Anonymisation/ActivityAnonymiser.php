@@ -4,17 +4,16 @@ declare(strict_types=1);
 
 namespace Qiick\Audit\Anonymisation;
 
-use Illuminate\Database\Connection;
-use Illuminate\Database\DatabaseTransactionRecord;
-use Illuminate\Database\DatabaseTransactionsManager;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Carbon;
 use InvalidArgumentException;
 use Qiick\Audit\Contracts\AnonymisationReport;
-use Qiick\Audit\Contracts\AuditAnonymiser;
 use Qiick\Audit\Contracts\ErasureSubject;
+use Qiick\Audit\Contracts\FleetAuditAnonymiserContract;
+use Qiick\Audit\Erasure\ErasureReport;
 use Qiick\Audit\Events\ActivityAnonymised;
 use Qiick\Audit\Models\Activity;
+use Qiick\Audit\Support\AuditCommitService;
 use Qiick\Audit\Support\SecretAttributeFloor;
 use RuntimeException;
 use stdClass;
@@ -43,7 +42,7 @@ use UnexpectedValueException;
  *
  * @api The default AuditAnonymiser binding.
  */
-final class ActivityAnonymiser implements AuditAnonymiser
+final class ActivityAnonymiser implements FleetAuditAnonymiserContract
 {
     /** Email addresses, the most common PII in free text. */
     private const string EMAIL_PATTERN = '/[A-Z0-9._%+-]+@[A-Z0-9-]+(?:\.[A-Z0-9-]+)*\.[A-Z]{2,}/i';
@@ -69,6 +68,61 @@ final class ActivityAnonymiser implements AuditAnonymiser
 
     public function anonymise(ErasureSubject $subject): AnonymisationReport
     {
+        $activityModel = Activity::newConfiguredModel();
+        $connection = $activityModel->getConnection();
+
+        return $connection->transaction(function () use ($activityModel, $connection, $subject): AnonymisationReport {
+            $counts = $this->scrubRows($activityModel, $subject);
+            AuditCommitService::afterCommit($connection, fn () => event(new ActivityAnonymised($counts['anonymised'], $subject->refs)));
+
+            return new AnonymisationReport($counts['anonymised']);
+        });
+    }
+
+    public function anonymiseForErasure(
+        Activity $activityModel,
+        ErasureSubject $subject,
+        array $publicIds,
+        ?string $organisationId,
+        string $mode,
+        bool $isDryRun,
+    ): ErasureReport {
+        $counts = $this->scrubRows($activityModel, $subject, $publicIds, $organisationId, $isDryRun);
+        $table = $activityModel->getTable();
+
+        return new ErasureReport('qiick/laravel-audit', $mode, $isDryRun, [
+            $table => self::storeCounts($counts['anonymised'], $counts['kept']),
+            'cleartext:'.$table.'.'.Activity::idColumn('subject_id') => self::storeCounts(0, $counts['subjectIds']),
+            'cleartext:'.$table.'.'.Activity::idColumn('causer_id') => self::storeCounts(0, $counts['causerIds']),
+        ]);
+    }
+
+    /** @return array{deleted: int, anonymised: int, kept: int, reason: ?string} */
+    private static function storeCounts(int $anonymised, int $kept): array
+    {
+        return [
+            'deleted' => 0,
+            'anonymised' => $anonymised,
+            'kept' => $kept,
+            'reason' => $kept > 0 ? 'legal_obligation' : null,
+        ];
+    }
+
+    /**
+     * The same scan plans and applies scrubbing, so the dry run predicts the
+     * real run without issuing any write. Real runs lock by primary key to
+     * avoid InnoDB range locks during the candidate scan at REPEATABLE READ.
+     *
+     * @param  list<string>  $publicIds  Empty for the original anonymiser API.
+     * @return array{anonymised: int, kept: int, subjectIds: int, causerIds: int}
+     */
+    private function scrubRows(
+        Activity $activityModel,
+        ErasureSubject $subject,
+        array $publicIds = [],
+        ?string $organisationId = null,
+        bool $isDryRun = false,
+    ): array {
         // A tombstone the patterns match would be scrubbed again on every run.
         if ($this->scrubText($subject->tombstone, [], "\0") !== $subject->tombstone) {
             throw new InvalidArgumentException('The tombstone must not look like an email address or a phone number.');
@@ -78,99 +132,155 @@ final class ActivityAnonymiser implements AuditAnonymiser
         $identifiers = $subject->identifiers;
         usort($identifiers, fn (string $left, string $right): int => mb_strlen($right) <=> mb_strlen($left));
 
-        $activityModel = Activity::newConfiguredModel();
         $connection = $activityModel->getConnection();
+        $table = $activityModel->getTable();
         $subjectIdColumn = Activity::idColumn('subject_id');
         $causerIdColumn = Activity::idColumn('causer_id');
-        $anonymisedRows = 0;
+        $query = $connection->table($table)
+            ->select(['id', 'description', 'properties', 'attribute_changes', 'anonymised_at', 'subject_type', 'causer_type', $subjectIdColumn, $causerIdColumn])
+            ->where(function (Builder $query) use ($subject, $subjectIdColumn, $causerIdColumn, $publicIds): void {
+                foreach ($subject->refs as $ref) {
+                    $query
+                        ->orWhere(fn (Builder $refQuery) => $refQuery->where('subject_type', $ref->type)->where($subjectIdColumn, $ref->id))
+                        ->orWhere(fn (Builder $refQuery) => $refQuery->where('causer_type', $ref->type)->where($causerIdColumn, $ref->id));
+                }
 
-        $connection->transaction(function () use ($activityModel, $connection, $subject, $subjectIdColumn, $causerIdColumn, $personalKeys, $identifiers, &$anonymisedRows): void {
-            $connection->table($activityModel->getTable())
-                ->select(['id', 'description', 'properties', 'attribute_changes', 'anonymised_at'])
-                ->where(function (Builder $query) use ($subject, $subjectIdColumn, $causerIdColumn): void {
-                    foreach ($subject->refs as $ref) {
-                        $query
-                            ->orWhere(fn (Builder $refQuery) => $refQuery->where('subject_type', $ref->type)->where($subjectIdColumn, $ref->id))
-                            ->orWhere(fn (Builder $refQuery) => $refQuery->where('causer_type', $ref->type)->where($causerIdColumn, $ref->id));
+                if ($publicIds !== []) {
+                    // Reserved attribution also links a user who created a
+                    // key used by another causer. JSON selectors let Laravel
+                    // choose the appropriate SQL for each database engine.
+                    foreach ([$subjectIdColumn, $causerIdColumn, 'properties->api_key_id', 'properties->api_key_created_by'] as $selector) {
+                        $query->orWhereIn(new LowercaseAuditColumnExpression($selector), $publicIds);
                     }
-                })
-                // A row can belong to two people (causer and subject): locking it
-                // makes a concurrent erasure wait for this commit and read the
-                // scrubbed row, instead of writing back its stale copy.
-                ->lockForUpdate()
-                ->lazyById()
-                ->each(function (stdClass $row) use ($activityModel, $connection, $subject, $personalKeys, $identifiers, &$anonymisedRows): void {
-                    if ($this->anonymiseRow($row, $activityModel, $connection, $subject->tombstone, $personalKeys, $identifiers)) {
-                        $anonymisedRows++;
-                    }
-                });
+                }
+            });
 
-            // Bound to this transaction's own record: Connection::afterCommit()
-            // attaches to the newest transaction on any connection, which can
-            // be one another connection opened during the erasure. The event
-            // follows the audit connection's outermost commit and is dropped
-            // when the product's erasure transaction rolls back.
-            $finalCount = $anonymisedRows;
-            $dispatch = fn () => event(new ActivityAnonymised($finalCount, $subject->refs));
-            /** @var DatabaseTransactionsManager $transactions */
-            $transactions = app('db.transactions');
+        if ($organisationId !== null) {
+            $query->where('organisation_id', $organisationId);
+        }
 
-            $auditTransaction = $transactions->callbackApplicableTransactions()
-                ->last(fn (DatabaseTransactionRecord $transaction): bool => $transaction->connection === $connection->getName())
-                ?? throw new RuntimeException('The erasure transaction is not tracked by the transactions manager.');
-            $auditTransaction->addCallback($dispatch);
-        });
+        $candidates = $isDryRun ? $query : (clone $query)->select('id');
+        $counts = ['anonymised' => 0, 'kept' => 0, 'subjectIds' => 0, 'causerIds' => 0];
 
-        return new AnonymisationReport($anonymisedRows);
+        foreach ($candidates->lazyById() as $row) {
+            if (! $isDryRun) {
+                // Read the current values and recheck ownership after the scan.
+                // Retention may have removed the row or another erasure scrubbed it.
+                $row = (clone $query)->where('id', $row->id)->lockForUpdate()->first();
+
+                if ($row === null) {
+                    continue;
+                }
+            }
+
+            $properties = self::jsonColumn($row, 'properties');
+            $hasSubjectRef = self::hasMorph($row->subject_type, $row->{$subjectIdColumn}, $subject, $publicIds);
+            $hasCauserRef = self::hasMorph($row->causer_type, $row->{$causerIdColumn}, $subject, $publicIds);
+            // The older API scrubs every row selected by its original
+            // database predicates. Fleet runs verify exact ownership because
+            // a case-insensitive collation can return broader matches.
+            $hasMorph = $publicIds === [] || $hasSubjectRef || $hasCauserRef;
+            $hasCredential = self::hasPublicId(data_get($properties, 'api_key_id'), $publicIds);
+            $hasCreator = self::hasPublicId(data_get($properties, 'api_key_created_by'), $publicIds);
+            $isOwnActivity = $hasMorph || $hasCredential;
+
+            if (! $isOwnActivity && ! $hasCreator) {
+                continue;
+            }
+
+            $counts['kept']++;
+            $counts['subjectIds'] += $hasSubjectRef ? 1 : 0;
+            $counts['causerIds'] += $hasCauserRef ? 1 : 0;
+            $updates = $this->rowUpdates($row, $properties, $subject->tombstone, $isOwnActivity ? $personalKeys : [], $identifiers, $isOwnActivity, $hasCredential);
+
+            if ($updates === [] && $row->anonymised_at !== null) {
+                continue;
+            }
+
+            if (! $isDryRun) {
+                $updates['anonymised_at'] = $activityModel->fromDateTime(Carbon::now('UTC'));
+                $connection->table($table)->where('id', $row->id)->update($updates);
+            }
+
+            $counts['anonymised']++;
+        }
+
+        return $counts;
+    }
+
+    /** @param list<string> $publicIds */
+    private static function hasMorph(mixed $type, mixed $id, ErasureSubject $subject, array $publicIds): bool
+    {
+        $refs = array_map(fn ($ref): array => [$ref->type, $ref->id], $subject->refs);
+
+        return in_array([$type, $id], $refs, true) || self::hasPublicId($id, $publicIds);
+    }
+
+    /** @param list<string> $publicIds */
+    private static function hasPublicId(mixed $value, array $publicIds): bool
+    {
+        return is_string($value) && in_array(strtolower($value), $publicIds, true);
     }
 
     /**
+     * Attribution alone can link somebody else's activity to a creator.
+     * Scrub the supplied identifiers there without blanking the other
+     * person's names, email addresses, IP address or user agent.
+     *
      * @param  list<string>  $personalKeys  normalised (SecretAttributeFloor::normalise())
      * @param  list<string>  $identifiers  longest first
+     * @return array<string, string>
      */
-    private function anonymiseRow(stdClass $row, Activity $activityModel, Connection $connection, string $tombstone, array $personalKeys, array $identifiers): bool
-    {
+    private function rowUpdates(
+        stdClass $row,
+        mixed $properties,
+        string $tombstone,
+        array $personalKeys,
+        array $identifiers,
+        bool $shouldScrubPatterns,
+        bool $hasCredential,
+    ): array {
         $updates = [];
 
         $description = self::stringColumn($row, 'description');
-        $scrubbedDescription = $this->scrubText($description, $identifiers, $tombstone);
+        $scrubbedDescription = $this->scrubText($description, $identifiers, $tombstone, $shouldScrubPatterns);
 
         if ($scrubbedDescription !== $description) {
             $updates['description'] = $scrubbedDescription;
         }
 
-        foreach (['properties', 'attribute_changes'] as $jsonColumn) {
-            if ($row->{$jsonColumn} === null) {
-                continue;
-            }
+        $propertyKeys = $hasCredential ? [...$personalKeys, 'apikeyprefix'] : $personalKeys;
+        $scrubbedProperties = $this->scrubValue($properties, $propertyKeys, $identifiers, $tombstone, $shouldScrubPatterns);
 
-            $decoded = json_decode(self::stringColumn($row, $jsonColumn), true, flags: JSON_THROW_ON_ERROR);
-            $scrubbed = $this->scrubValue($decoded, $personalKeys, $identifiers, $tombstone);
-
-            if ($scrubbed !== $decoded) {
-                $updates[$jsonColumn] = json_encode($scrubbed, JSON_THROW_ON_ERROR);
-            }
+        if ($scrubbedProperties !== $properties) {
+            $updates['properties'] = json_encode($scrubbedProperties, JSON_THROW_ON_ERROR);
         }
 
-        if ($updates === [] && $row->anonymised_at !== null) {
-            return false;
+        $changes = self::jsonColumn($row, 'attribute_changes');
+        $scrubbedChanges = $this->scrubValue($changes, $personalKeys, $identifiers, $tombstone, $shouldScrubPatterns);
+
+        if ($scrubbedChanges !== $changes) {
+            $updates['attribute_changes'] = json_encode($scrubbedChanges, JSON_THROW_ON_ERROR);
         }
 
-        $updates['anonymised_at'] = $activityModel->fromDateTime(Carbon::now('UTC'));
+        return $updates;
+    }
 
-        $connection->table($activityModel->getTable())->where('id', $row->id)->update($updates);
-
-        return true;
+    private static function jsonColumn(stdClass $row, string $column): mixed
+    {
+        return $row->{$column} === null
+            ? null
+            : json_decode(self::stringColumn($row, $column), true, flags: JSON_THROW_ON_ERROR);
     }
 
     /**
      * @param  list<string>  $personalKeys
      * @param  list<string>  $identifiers
      */
-    private function scrubValue(mixed $value, array $personalKeys, array $identifiers, string $tombstone): mixed
+    private function scrubValue(mixed $value, array $personalKeys, array $identifiers, string $tombstone, bool $shouldScrubPatterns): mixed
     {
         if (is_string($value)) {
-            return $this->scrubText($value, $identifiers, $tombstone);
+            return $this->scrubText($value, $identifiers, $tombstone, $shouldScrubPatterns);
         }
 
         if (! is_array($value)) {
@@ -182,7 +292,7 @@ final class ActivityAnonymiser implements AuditAnonymiser
         foreach ($value as $key => $nestedValue) {
             $scrubbed[$key] = is_string($key) && in_array(SecretAttributeFloor::normalise($key), $personalKeys, true)
                 ? $tombstone
-                : $this->scrubValue($nestedValue, $personalKeys, $identifiers, $tombstone);
+                : $this->scrubValue($nestedValue, $personalKeys, $identifiers, $tombstone, $shouldScrubPatterns);
         }
 
         return $scrubbed;
@@ -191,15 +301,22 @@ final class ActivityAnonymiser implements AuditAnonymiser
     /**
      * @param  list<string>  $identifiers  longest first
      */
-    private function scrubText(string $text, array $identifiers, string $tombstone): string
+    private function scrubText(string $text, array $identifiers, string $tombstone, bool $shouldScrubPatterns = true): string
     {
+        // Treat the configured tombstone as text, even if it contains "$1".
+        $replacement = static fn (): string => $tombstone;
+
         foreach ($identifiers as $identifier) {
             // Whole words only: a short name (`Al`) must not corrupt `Alarm`.
-            $text = preg_replace('/(?<![\p{L}\p{N}])'.preg_quote($identifier, '/').'(?![\p{L}\p{N}])/iu', $tombstone, $text)
+            $text = preg_replace_callback(ErasureSubject::identifierPattern($identifier), $replacement, $text)
                 ?? throw new RuntimeException('An identifier could not be scrubbed.');
         }
 
-        $text = preg_replace(self::EMAIL_PATTERN, $tombstone, $text)
+        if (! $shouldScrubPatterns) {
+            return $text;
+        }
+
+        $text = preg_replace_callback(self::EMAIL_PATTERN, $replacement, $text)
             ?? throw new RuntimeException('Email addresses could not be scrubbed.');
 
         return preg_replace_callback(
