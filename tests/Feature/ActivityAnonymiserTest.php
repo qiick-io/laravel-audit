@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Facades\DB;
@@ -502,4 +503,37 @@ it('reports an erasure once when the audit connection commits with another conne
     $unrelatedConnection->rollBack();
 
     Event::assertDispatchedTimes(ActivityAnonymised::class, 1);
+});
+
+it('never reports an erasure when another connection opens a transaction during it and commits first (Codex r2)', function (): void {
+    Event::fake([ActivityAnonymised::class]);
+    config()->set('database.connections.unrelated', ['driver' => 'sqlite', 'database' => ':memory:']);
+    $person = personToErase();
+    $activity = logAbout($person, null, 'logged in', ['email' => 'ada@example.com']);
+    $auditConnection = DB::connection();
+    $unrelatedConnection = DB::connection('unrelated');
+    $hasOpenedUnrelated = false;
+
+    // A query listener opens bookkeeping on another connection while the erasure writes.
+    DB::listen(function (QueryExecuted $query) use (&$hasOpenedUnrelated, $auditConnection, $unrelatedConnection): void {
+        if (! $hasOpenedUnrelated && $query->connectionName === $auditConnection->getName() && str_starts_with(strtolower($query->sql), 'update')) {
+            $hasOpenedUnrelated = true;
+            $unrelatedConnection->beginTransaction();
+        }
+    });
+
+    $auditConnection->beginTransaction();
+
+    anonymise($person);
+
+    expect($hasOpenedUnrelated)->toBeTrue();
+
+    $unrelatedConnection->commit();
+
+    Event::assertNotDispatched(ActivityAnonymised::class);
+
+    $auditConnection->rollBack();
+
+    Event::assertNotDispatched(ActivityAnonymised::class);
+    expect(Activity::query()->findOrFail($activity->getKey())->getProperty('email'))->toBe('ada@example.com');
 });

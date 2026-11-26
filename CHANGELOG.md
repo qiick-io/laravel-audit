@@ -12,8 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `ActivityAnonymised` is dispatched after the outermost transaction of the
   audit connection commits: an erasure the product's transaction rolled back
-  is no longer reported, even when another connection commits meanwhile (RC
-  review M1).
+  is no longer reported, even when another connection opens a transaction
+  during the erasure and commits first (RC review M1).
 - Concurrent erasures of two people who share a row no longer write back a
   name the other one scrubbed: the anonymiser locks the rows it reads. The README documents the transaction behaviour of logging,
   erasure and the purge (M2).

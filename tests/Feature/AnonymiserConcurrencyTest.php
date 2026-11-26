@@ -79,7 +79,16 @@ it('never restores a name another erasure scrubbed while both run in separate se
         try {
             $eraseGrace();
             $secondSessionOutcome = 'committed';
-        } catch (QueryException) {
+        } catch (QueryException $exception) {
+            // Only a lock wait timeout proves the row lock: PostgreSQL 55P03, MySQL/MariaDB 1205.
+            $isLockWait = DB::getDriverName() === 'pgsql'
+                ? $exception->getCode() === '55P03'
+                : ($exception->errorInfo[1] ?? null) === 1205;
+
+            if (! $isLockWait) {
+                throw $exception;
+            }
+
             $secondSessionOutcome = 'waited for the lock';
         }
     });
