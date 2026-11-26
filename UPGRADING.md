@@ -36,14 +36,12 @@ For excubia-app, signaculum-core and instituta-core (design §6.1). externa
 6. Bind `Qiick\Audit\Contracts\OrganisationResolver` to the product's
    resolver: the organisation of the current team context, never a user's
    first membership.
-7. Call `Qiick\Audit\Contracts\AuditAnonymiser` from the erasure job, in the
-   same transaction as the user tombstoning, on the activity model's
-   connection (the default one unless the product's activity model names
-   another): only a transaction on that connection rolls the anonymisation
-   back with the tombstoning. Rows written before the product
-   set a morph map store the class name as morph type: pass a
-   `new MorphRef(User::class, (string) $user->getKey())` next to
-   `MorphRef::of($user)` so those rows are found too.
+7. Call `Qiick\Audit\Erasure\AuditEraser` from the product orchestrator with
+   the snapshot captured before deletion or principal deactivation. The
+   eraser joins any transaction on the activity model's connection. Update
+   fleet erasure listeners to use the counts-only `SubjectErasedEvent`. If the
+   product replaces `AuditAnonymiser`, its binding must implement
+   `FleetAuditAnonymiserContract` to participate in fleet erasure.
 8. `activitylog:clean` can be removed from the schedule: the package
    schedules `audit:purge` daily (365 days, 730 for the security logs `auth`,
    `security`, `access` and `api-keys`). If it

@@ -54,6 +54,7 @@ php artisan vendor:publish --tag=audit-config
 | `audit.sensitive_attributes` | `password`, `remember_token`, `two_factor_secret`, `two_factor_recovery_codes`, `key_hash`, `previous_key_hash`, `secret`, `token_hash`, `private_key` | logged as `[redacted]`, on top of the built-in names and parts and `encrypted*` / `hashed` casts |
 | `audit.sensitive_parts` | `[]` | extra name parts that make a value secret (other languages) |
 | `audit.personal_keys` | `[]` | extra property keys the anonymiser scrubs |
+| `audit.erasure_tombstone` | `erased` | one fleet erasure replacement shared by all people |
 | `audit.user_agent_max` | `512` | stored user agent length |
 | `audit.retention_days` | `365` | general retention floor |
 | `audit.security_log_names` | `auth`, `security`, `access`, `api-keys` | the security logs, kept longer |
@@ -223,13 +224,10 @@ comes from the `request_id` key of Laravel's context, which
 - **Buffered logging** (`activitylog.buffer.enabled`), which writes after the
   response, is refused in production by a boot check: buffered security
   events are lost when the process dies.
-- **Erasure joins the caller's transaction too**, as a savepoint on the
-  activity model's connection, and `ActivityAnonymised` is dispatched only
-  after the outermost commit **of that connection**: when the product's
-  erasure transaction rolls back, the anonymisation is undone and no listener
-  hears of it, whatever other connections commit meanwhile. Run the erasure
-  job's tombstoning on the same connection, or the two do not roll back
-  together.
+- **Erasure joins the caller's transaction** as a savepoint on the activity
+  model's connection. The erasure event is dispatched after the outermost
+  commit of that connection. Rolling back the audit transaction undoes the
+  scrubbing and discards the event.
 - **Concurrent erasures** lock the rows they read (`SELECT … FOR UPDATE` on
   PostgreSQL, MySQL and MariaDB), so two erasures of people who share a row
   (one causer, the other subject) run one after the other on that row and
@@ -240,54 +238,59 @@ comes from the `request_id` key of Laravel's context, which
 
 ## Erasure (GDPR)
 
-The product's erasure job calls the anonymiser in the same transaction as the
-user tombstoning, or after it, never alone:
+The product orchestrator calls `AuditEraser` after account deletion on a full
+erasure, or after deactivating the principal on an organisation erasure. It
+passes the identifiers collected before the product removes the account data:
 
 ```php
-use Qiick\Audit\Contracts\AuditAnonymiser;
-use Qiick\Audit\Contracts\ErasureSubject;
-use Qiick\Audit\Contracts\MorphRef;
+use Qiick\Audit\Erasure\AuditEraser;
 
-$report = app(AuditAnonymiser::class)->anonymise(new ErasureSubject(
-    refs: [MorphRef::of($user), MorphRef::of($principal)],  // every model that identifies the person
-    tombstone: $user->tombstone,                             // the product's unique tombstone
-    identifiers: [$email, $username, $displayName],          // scrubbed from free text
-));
+$report = app(AuditEraser::class)->erase(
+    userId: $userId,
+    userPublicId: $userPublicId,
+    mode: AuditEraser::DELETE,
+    publicIds: [$principalPublicId, $apiKeyPublicId],
+    identifiers: [$email, $username, $displayName],
+    organisationId: $organisationId, // null for a full erasure
+);
 ```
 
-Matching rows keep their event, log name, timestamps and morphs; their
-personal keys, the identifiers (as whole words) and any email address or
-phone-like sequence become the tombstone, and `anonymised_at` is set. A second
-run reports `0` rows. The tombstone must not contain an identifier or look
-like an email address or a phone number.
+Both modes retain audit evidence and scrub the personal data. The report
+counts anonymised and kept rows, with separate counts for the subject and
+causer IDs retained in cleartext for `legal_obligation`. A repeat run reports
+`changed() === 0`. Set `dryRun: true` for a preview without writes or events.
+A real run dispatches `SubjectErasedEvent` with the report after the
+outermost commit on the configured activity model's connection.
 
-The fleet-standard `AuditEraser` (one `erase()` shape for every qiick package)
-arrives before 1.0, once the fleet conformance suite is merged; until then the
-anonymiser is the entry point (`docs/decisions/2026-11-25-standard-eraser-after-conformance.md`).
+Direct calls to `AuditAnonymiser::anonymise()` still accept an explicit
+`ErasureSubject` and dispatch `ActivityAnonymised`. A replacement binding must
+implement `FleetAuditAnonymiserContract` to support the fleet eraser.
 
 ### Erasure perimeter and caller duties
 
-The anonymiser erases what it can recognise, and no more. Calling it is one
-step of an Art. 17 erasure, not the whole of it.
+Audit erasure is one step of the product's Art. 17 erasure.
 
 **What it covers**
 
-- Rows where one of the `refs` is the **causer or the subject**, matched by
-  stored morph type and id (`audit.columns` honoured). Pass every model that
-  identifies the person: user, principals, API keys. Rows written before the
-  product set a morph map store the class name: pass both refs (UPGRADING).
+- Rows where the user, one of their principals or one of their keys is the
+  **causer or the subject**. The eraser uses the alias and class name of
+  `auth.providers.users.model` for the user, and matches principal and key
+  morphs by their supplied UUIDs. It honours `audit.columns` and confines a
+  scoped run to the given `organisation_id`, excluding rows with no organisation.
 - In those rows: the personal keys at any depth of `properties` and
   `attribute_changes`, in any spelling (`ip`, `ip_address`, `user_agent`,
   `email`, `username`, `name`, `first_name`, `last_name`, plus
   `audit.personal_keys`); every `identifiers` value as a whole word; every
   email address and phone-like sequence (8–15 digits) in any string and in
   `description`.
+- Reserved credential attribution keyed to the supplied UUIDs. When this is
+  the only link to the person, the eraser scrubs the supplied text identifiers
+  and UUIDs, and the prefix of a matching API key.
 
 **What it does not cover**
 
-- **Other people's rows.** A row caused by an admin about another subject that
-  mentions the person in free text (`description` or a property) is outside
-  the perimeter: only causer and subject are matched.
+- **Free text without attribution.** A row solely linked to another person can
+  still mention this person in `description` or a property.
 - **Free text the patterns do not recognise.** A postal address, a date of
   birth, a nickname not in `identifiers`, or a phone number stored as a JSON
   number survives unless its key is a personal key.
@@ -302,7 +305,8 @@ step of an Art. 17 erasure, not the whole of it.
 
 1. Keep personal data out of `description`: put it in properties under keys
    the anonymiser knows, or add the product's keys to `audit.personal_keys`.
-2. Pass every `refs` and every `identifiers` value the person is known by.
+2. Pass every principal and API key UUID and every free-text identifier the
+   person is known by. Use a shared tombstone that contains no identifier.
 3. Deactivate the account first, then anonymise, so no new row about the
    person is written during the erasure.
 4. Erase or anonymise the product's own tables, logs and backups.

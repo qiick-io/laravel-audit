@@ -42,6 +42,9 @@ return [
      */
     'personal_keys' => [],
 
+    /* Fleet erasure uses one replacement for everyone so it adds no link between rows. */
+    'erasure_tombstone' => 'erased',
+
     /* The user agent stored in `properties.user_agent` is cut to this length. */
     'user_agent_max' => 512,
 

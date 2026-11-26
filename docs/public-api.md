@@ -30,9 +30,14 @@ and `AuditContext::httpRequest()` are `@internal` methods of a public class.
 - `Qiick\Audit\Contracts\AuditActorResolver` (interface)
 - `Qiick\Audit\Contracts\AuditAnonymiser` (interface)
 - `Qiick\Audit\Contracts\ErasureSubject` (class)
+- `Qiick\Audit\Contracts\FleetAuditAnonymiserContract` (interface)
 - `Qiick\Audit\Contracts\MorphRef` (class)
 - `Qiick\Audit\Contracts\OrganisationResolver` (interface)
+- `Qiick\Audit\Erasure\AuditEraser` (class)
+- `Qiick\Audit\Erasure\ErasureReport` (class)
+- `Qiick\Audit\Erasure\OrganisationScopeUnsupportedException` (class)
 - `Qiick\Audit\Events\ActivityAnonymised` (class)
+- `Qiick\Audit\Events\SubjectErasedEvent` (class)
 - `Qiick\Audit\Laravel\AuditServiceProvider` (class)
 - `Qiick\Audit\Models\Activity` (class)
 - `Qiick\Audit\Resolvers\NullOrganisationResolver` (class)
@@ -50,6 +55,7 @@ Every key sits in `config/audit.php`, which documents each one:
 - `audit.sensitive_attributes`
 - `audit.sensitive_parts`
 - `audit.personal_keys`
+- `audit.erasure_tombstone`
 - `audit.user_agent_max`
 - `audit.retention_days`
 - `audit.security_log_names`
@@ -81,7 +87,8 @@ Written by the package on every row, never by callers (design §3.1): `ip`,
 
 ## Events
 
-- `Qiick\Audit\Events\ActivityAnonymised` after an erasure.
+- `Qiick\Audit\Events\ActivityAnonymised` after a direct `AuditAnonymiser::anonymise()` call commits.
+- `Qiick\Audit\Events\SubjectErasedEvent` after a real `AuditEraser::erase()` call commits, with an `ErasureReport` containing counts and retention reasons.
 
 ## Artisan commands
 

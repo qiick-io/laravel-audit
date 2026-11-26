@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Qiick\Audit\Tests\Support\PackageTestCase;
 
 /*
@@ -10,3 +11,7 @@ use Qiick\Audit\Tests\Support\PackageTestCase;
  * synced suite stays for drift-check without running here.
  */
 pest()->extend(PackageTestCase::class)->in('Feature', 'Unit', 'Http');
+
+pest()->extend(PackageTestCase::class)
+    ->use(DatabaseMigrations::class)
+    ->in('Erasure');

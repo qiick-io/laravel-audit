@@ -35,6 +35,10 @@ CLASSES=(
   'Qiick\Audit\Actions\LogActivityAction'
   'Qiick\Audit\Laravel\AuditServiceProvider'
   'Qiick\Audit\Models\Activity'
+  'Qiick\Audit\Erasure\AuditEraser'
+  'Qiick\Audit\Erasure\ErasureReport'
+  'Qiick\Audit\Support\AuditCommitService'
+  'Qiick\Audit\Anonymisation\LowercaseAuditColumnExpression'
 )
 
 MIN="${MUTATE_MIN:-95}"
