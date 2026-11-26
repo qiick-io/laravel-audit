@@ -295,9 +295,12 @@ final class ActivityAnonymiser implements FleetAuditAnonymiserContract
      */
     private function scrubText(string $text, array $identifiers, string $tombstone, bool $shouldScrubPatterns = true): string
     {
+        // Treat the configured tombstone as text, even if it contains "$1".
+        $replacement = static fn (): string => $tombstone;
+
         foreach ($identifiers as $identifier) {
             // Whole words only: a short name (`Al`) must not corrupt `Alarm`.
-            $text = preg_replace('/(?<![\p{L}\p{N}])'.preg_quote($identifier, '/').'(?![\p{L}\p{N}])/iu', $tombstone, $text)
+            $text = preg_replace_callback('/(?<![\p{L}\p{N}])'.preg_quote($identifier, '/').'(?![\p{L}\p{N}])/iu', $replacement, $text)
                 ?? throw new RuntimeException('An identifier could not be scrubbed.');
         }
 
@@ -305,7 +308,7 @@ final class ActivityAnonymiser implements FleetAuditAnonymiserContract
             return $text;
         }
 
-        $text = preg_replace(self::EMAIL_PATTERN, $tombstone, $text)
+        $text = preg_replace_callback(self::EMAIL_PATTERN, $replacement, $text)
             ?? throw new RuntimeException('Email addresses could not be scrubbed.');
 
         return preg_replace_callback(

@@ -169,6 +169,22 @@ it('keeps scanning if the first retained row was already scrubbed', function ():
         ->and(DB::table('activity_log')->where('id', $remainingRow)->value('description'))->toBe('erased signed in');
 });
 
+it('writes the shared tombstone literally in text and JSON', function (): void {
+    config()->set('audit.erasure_tombstone', '[erased-$1]');
+    $activityId = seedFleetActivity([
+        'causer_type' => 'user',
+        'causer_id' => '420000',
+        'description' => 'Ada Lovelace used ada@example.test',
+        'properties' => json_encode(['first_name' => 'Ada'], JSON_THROW_ON_ERROR),
+    ]);
+
+    app(AuditEraser::class)->erase('420000', (string) Str::uuid(), AuditEraser::DELETE, identifiers: ['Ada Lovelace']);
+
+    $activity = DB::table('activity_log')->where('id', $activityId)->first();
+    expect($activity->description)->toBe('[erased-$1] used [erased-$1]')
+        ->and(json_decode($activity->properties, true, flags: JSON_THROW_ON_ERROR))->toBe(['first_name' => '[erased-$1]']);
+});
+
 it('fails closed with a binding that supports only direct anonymisation', function (): void {
     $anonymiser = Mockery::mock(AuditAnonymiser::class);
     $anonymiser->shouldNotReceive('anonymise');
