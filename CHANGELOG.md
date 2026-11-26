@@ -8,6 +8,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-beta.1] - 2026-11-26
+
+First pre-release. Before `1.0.0` any minor version may break the public API
+(see `UPGRADING.md`).
+
+### Upgrade notes
+
+- New install: `composer require qiick/laravel-audit:^0.1@beta`, then
+  `php artisan vendor:publish --tag=audit-config` and `php artisan migrate`.
+  Adopting it in a product replaces the product's own `activity_log`
+  migration and Spatie configuration: follow "Adopting the package in a
+  product" in `UPGRADING.md`.
+- Migrations are not frozen before `1.0.0`: a later beta may change the
+  `create_activity_log_table` migration, and upgrading to it may need a fresh
+  database (`migrate:fresh`).
+- The scheduled `audit:purge` uses `withoutOverlapping()->onOneServer()`: the
+  servers must share a cache store that supports locks.
+
 ### Fixed
 
 - `ActivityAnonymised` is dispatched after the outermost transaction of the
@@ -162,3 +180,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Dependency register `docs/dependencies.md`: one row per runtime
   `composer.json` `require` entry with constraint rationale, usage,
   maintainer, license, known risk and an in-package exit plan.
+
+[Unreleased]: https://github.com/qiick-io/laravel-audit/compare/v0.1.0-beta.1...HEAD
+[0.1.0-beta.1]: https://github.com/qiick-io/laravel-audit/releases/tag/v0.1.0-beta.1

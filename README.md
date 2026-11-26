@@ -24,7 +24,7 @@ Part of the qiick fleet. Binding design:
 
 ## Status
 
-Pre-`0.1.0`. Public APIs may change in any 0.x release; see [UPGRADING.md](./UPGRADING.md).
+Pre-release: `0.1.0-beta.1`. Public APIs may change in any 0.x release; see [UPGRADING.md](./UPGRADING.md).
 Do not require this package from production apps until a tagged release lands on
 Packagist (Packagist publish only after Luca’s go).
 
@@ -43,7 +43,7 @@ Packagist (Packagist publish only after Luca’s go).
 ## Install (when published)
 
 ```bash
-composer require qiick/laravel-audit
+composer require qiick/laravel-audit:^0.1@beta
 php artisan vendor:publish --tag=audit-config
 ```
 
