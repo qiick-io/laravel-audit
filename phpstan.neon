@@ -1,0 +1,17 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    level: max
+    paths:
+        - src
+        - config
+        # Use the package traits, so PHPStan analyses them.
+        - tests/Support/Models/AuditedIntegerRecord.php
+        - tests/Support/Models/ActiveIntegerRecord.php
+    tmpDir: build/phpstan
+    treatPhpDocTypesAsCertain: false
+    bootstrapFiles:
+        - phpstan-bootstrap.php
+    configDirectories:
+        - config
