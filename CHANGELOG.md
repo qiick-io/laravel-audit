@@ -17,6 +17,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Concurrent erasures of two people who share a row no longer write back a
   name the other one scrubbed: the anonymiser locks the rows it reads. The README documents the transaction behaviour of logging,
   erasure and the purge (M2).
+- The scheduled purge runs on one server and without overlapping itself
+  (`withoutOverlapping()->onOneServer()`, 24-hour lock), and each chunk delete
+  checks the cutoff again, so overlapping purges (a manual run during the
+  scheduled one) still delete every old row once and never a row inside its
+  floor (RC review M5).
+- The purge reads the ids to delete from the write connection: with a read
+  replica that lags, it kept reading rows already deleted and never finished
+  (both `audit:purge` and `activitylog:clean`). Each chunk also starts after
+  the last id read, so a purge inside a MySQL `REPEATABLE READ` transaction
+  finishes when another session deletes the rows its snapshot still shows.
 
 ### Added
 
