@@ -259,6 +259,8 @@ Both modes retain audit evidence and scrub the personal data. The report
 counts anonymised and kept rows, with separate counts for the subject and
 causer IDs retained in cleartext for `legal_obligation`. A repeat run reports
 `changed() === 0`. Set `dryRun: true` for a preview without writes or events.
+A report uses `legal_obligation` for the whole evidence store, including
+security logs. Log-specific retention periods still apply.
 A real run dispatches `SubjectErasedEvent` with the report after the
 outermost commit on the configured activity model's connection.
 
@@ -273,7 +275,8 @@ Audit erasure is one step of the product's Art. 17 erasure.
 **What it covers**
 
 - Rows where the user, one of their principals or one of their keys is the
-  **causer or the subject**. The eraser uses the alias and class name of
+  **causer or the subject**, or where one of their keys is the recorded
+  **API credential**. The eraser uses the alias and class name of
   `auth.providers.users.model` for the user, and matches principal and key
   morphs by their supplied UUIDs. It honours `audit.columns` and confines a
   scoped run to the given `organisation_id`, excluding rows with no organisation.
@@ -283,9 +286,9 @@ Audit erasure is one step of the product's Art. 17 erasure.
   `audit.personal_keys`); every `identifiers` value as a whole word; every
   email address and phone-like sequence (8–15 digits) in any string and in
   `description`.
-- Reserved credential attribution keyed to the supplied UUIDs. When this is
-  the only link to the person, the eraser scrubs the supplied text identifiers
-  and UUIDs, and the prefix of a matching API key.
+- When a matched API key was used, the eraser also scrubs its display prefix.
+  When key creation is the only link, it scrubs the supplied identifiers
+  and UUIDs while preserving the other person's request details.
 
 **What it does not cover**
 
@@ -306,7 +309,8 @@ Audit erasure is one step of the product's Art. 17 erasure.
 1. Keep personal data out of `description`: put it in properties under keys
    the anonymiser knows, or add the product's keys to `audit.personal_keys`.
 2. Pass every principal and API key UUID and every free-text identifier the
-   person is known by. Use a shared tombstone that contains no identifier.
+   person is known by. Use a shared tombstone that cannot expand when one
+   of its words is replaced with the full tombstone.
 3. Deactivate the account first, then anonymise, so no new row about the
    person is written during the erasure.
 4. Erase or anonymise the product's own tables, logs and backups.

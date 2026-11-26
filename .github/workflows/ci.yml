@@ -112,9 +112,10 @@ jobs:
             options: >-
               -e MYSQL_ALLOW_EMPTY_PASSWORD=yes -e MYSQL_DATABASE=laravel_audit
               --health-cmd="mysqladmin ping -h 127.0.0.1" --health-interval=5s --health-retries=20
+          # Preserve the existing required check context when upgrading its service.
           - name: MariaDB 10.11
             connection: mariadb
-            image: mariadb:10.11
+            image: mariadb:11.4@sha256:a8992b5e5404d11e03c54a31d0c1bdea3fd116d283aa6d1a627551f29045309b
             port: 3306
             options: >-
               -e MARIADB_ALLOW_EMPTY_ROOT_PASSWORD=yes -e MARIADB_DATABASE=laravel_audit

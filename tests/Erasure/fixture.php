@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Qiick\Audit\Erasure\AuditEraser;
@@ -11,8 +12,8 @@ use Qiick\Standards\Erasure\Support\ErasurePerson;
 
 /**
  * The audit table is the only store. The package writes no cache, file or
- * secondary connection containing a person's data. The user is represented
- * by its historical morph, as it is after the product deletes the user row.
+ * secondary connection containing a person's data. User references include
+ * the current alias and historical class name, with the user already deleted.
  */
 return new class implements ErasureFixture
 {
@@ -97,13 +98,24 @@ return new class implements ErasureFixture
             [
                 ...$attributes,
                 'public_id' => (string) Str::uuid7(),
-                'subject_type' => (new AuthenticatableRecord)->getMorphClass(),
+                'subject_type' => AuthenticatableRecord::class,
                 'subject_id' => $person->userId,
                 'causer_type' => 'principal',
                 'causer_id' => $principalId,
                 'description' => "{$name} signed in as {$username}",
                 'properties' => json_encode(['ip' => $ipAddress, 'userAgent' => $userAgent], JSON_THROW_ON_ERROR),
                 'attribute_changes' => json_encode(['attributes' => ['email' => $email]], JSON_THROW_ON_ERROR),
+            ],
+            [
+                ...$attributes,
+                'public_id' => (string) Str::uuid7(),
+                'subject_type' => null,
+                'subject_id' => null,
+                'causer_type' => 'audit-user',
+                'causer_id' => $person->userId,
+                'description' => "{$name} changed the account recovery phone",
+                'properties' => json_encode(['user_agent' => $userAgent], JSON_THROW_ON_ERROR),
+                'attribute_changes' => json_encode(['old' => ['contact' => ['email' => $email]]], JSON_THROW_ON_ERROR),
             ],
             [
                 ...$attributes,
@@ -115,6 +127,22 @@ return new class implements ErasureFixture
                 'description' => "{$name} created a key",
                 'properties' => json_encode(['api_key_id' => $credentialId, 'api_key_created_by' => $person->userPublicId], JSON_THROW_ON_ERROR),
                 'attribute_changes' => json_encode(['attributes' => ['firstName' => $name]], JSON_THROW_ON_ERROR),
+            ],
+            [
+                ...$attributes,
+                'public_id' => (string) Str::uuid7(),
+                'subject_type' => 'invoice',
+                'subject_id' => '77',
+                'causer_type' => null,
+                'causer_id' => null,
+                'description' => "Invoice updated using {$email} or +39 333 123 4567",
+                'properties' => json_encode([
+                    'api_key_id' => $credentialId,
+                    'api_key_prefix' => 'display-'.substr($credentialId, 0, 8),
+                    'ip' => $ipAddress,
+                    'user_agent' => $userAgent,
+                ], JSON_THROW_ON_ERROR),
+                'attribute_changes' => json_encode(['old' => ['contact' => ['first_name' => $name]]], JSON_THROW_ON_ERROR),
             ],
         ]);
     }
@@ -136,6 +164,13 @@ return new class implements ErasureFixture
 
     public function call(Closure $erase): object
     {
-        return $erase();
+        $previousMorphMap = Relation::morphMap();
+        Relation::morphMap(['audit-user' => AuthenticatableRecord::class], false);
+
+        try {
+            return $erase();
+        } finally {
+            Relation::morphMap($previousMorphMap, false);
+        }
     }
 };

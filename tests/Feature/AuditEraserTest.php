@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Facades\DB;
@@ -74,7 +75,11 @@ it('reports exactly which evidence it touched and which cleartext references it 
         'organisation_id' => $tenantId,
         'description' => 'Ada Lovelace signed in again',
     ]);
-    $unscoped = seedFleetActivity(['causer_type' => 'user', 'causer_id' => $userId]);
+    $unscoped = seedFleetActivity([
+        'causer_type' => 'user',
+        'causer_id' => $userId,
+        'description' => 'Ada Lovelace signed in without an organisation',
+    ]);
     $otherType = seedFleetActivity(['causer_type' => 'document', 'causer_id' => $userId, 'organisation_id' => $tenantId]);
     $eraser = app(AuditEraser::class);
 
@@ -95,7 +100,8 @@ it('reports exactly which evidence it touched and which cleartext references it 
         ->and(DB::table('activity_log')->whereNotNull('anonymised_at')->orderBy('id')->pluck('id')->all())->toBe([$historical, $current, $principalOnly, $subjectOnly])
         ->and(DB::table('activity_log')->where('id', $historical)->value('description'))->toBe('erased used erased')
         ->and(DB::table('activity_log')->where('id', $historical)->value('causer_id'))->toBe(strtoupper($principalId))
-        ->and(DB::table('activity_log')->whereIn('id', [$unscoped, $otherType])->count())->toBe(2)
+        ->and(DB::table('activity_log')->where('id', $unscoped)->value('description'))->toBe('Ada Lovelace signed in without an organisation')
+        ->and(DB::table('activity_log')->where('id', $otherType)->exists())->toBeTrue()
         ->and($eraser->erase($userId, $publicId, AuditEraser::DELETE, [$principalId], ['Ada Lovelace'], $tenantId)->changed())->toBe(0);
 
     Event::assertDispatched(SubjectErasedEvent::class, fn (SubjectErasedEvent $event): bool => $event->report === $report);
@@ -132,6 +138,109 @@ it('unlinks a creator from another person’s activity without redacting the oth
         ->toMatchArray(['api_key_created_by' => 'erased', 'api_key_prefix' => 'OTHER', 'email' => 'someone-else@example.test'])
         ->and(json_decode(DB::table('activity_log')->where('id', $credentialOnly)->value('properties'), true, flags: JSON_THROW_ON_ERROR))
         ->toBe(['api_key_id' => 'erased', 'api_key_prefix' => 'erased']);
+});
+
+it('erases an identifier that overlaps the shared tombstone', function (string $identifier): void {
+    $activityId = seedFleetActivity([
+        'causer_type' => 'user',
+        'causer_id' => '420000',
+        'description' => "{$identifier} changed settings for Edmund",
+    ]);
+    $eraser = app(AuditEraser::class);
+    $publicId = (string) Str::uuid();
+
+    expect($eraser->erase('420000', $publicId, AuditEraser::ANONYMISE, identifiers: [$identifier])->changed())->toBe(1)
+        ->and(DB::table('activity_log')->where('id', $activityId)->value('description'))->toBe('erased changed settings for Edmund')
+        ->and($eraser->erase('420000', $publicId, AuditEraser::ANONYMISE, identifiers: [$identifier])->changed())->toBe(0);
+})->with(['Ed', 'ERASED']);
+
+it('scrubs all personal data when the API key is the only link to the person', function (): void {
+    $credentialId = (string) Str::uuid();
+    $activityId = seedFleetActivity([
+        'subject_type' => 'invoice',
+        'subject_id' => '77',
+        'description' => 'Invoice updated by ada@example.test or +39 333 123 4567',
+        'properties' => json_encode([
+            'api_key_id' => $credentialId,
+            'api_key_prefix' => 'KEY-DETAIL',
+            'ip' => '203.0.113.9',
+            'user_agent' => 'AdaBot/1.0',
+        ], JSON_THROW_ON_ERROR),
+        'attribute_changes' => json_encode(['old' => ['email' => 'ada@example.test']], JSON_THROW_ON_ERROR),
+    ]);
+    $eraser = app(AuditEraser::class);
+    $publicId = (string) Str::uuid();
+
+    $report = $eraser->erase('420000', $publicId, AuditEraser::ANONYMISE, [$credentialId]);
+    expect($report->stores['activity_log'])->toBe([
+        'deleted' => 0,
+        'anonymised' => 1,
+        'kept' => 1,
+        'reason' => 'legal_obligation',
+    ]);
+
+    $row = DB::table('activity_log')->where('id', $activityId)->first();
+    expect($row->description)->toBe('Invoice updated by erased or erased')
+        ->and(json_decode($row->properties, true, flags: JSON_THROW_ON_ERROR))
+        ->toMatchArray(['api_key_id' => 'erased', 'api_key_prefix' => 'erased', 'ip' => 'erased', 'user_agent' => 'erased'])
+        ->and(json_decode($row->attribute_changes, true, flags: JSON_THROW_ON_ERROR))->toBe(['old' => ['email' => 'erased']])
+        ->and($eraser->erase('420000', $publicId, AuditEraser::ANONYMISE, [$credentialId])->changed())->toBe(0);
+});
+
+it('allows other InnoDB sessions to append and update unrelated activity during erasure', function (): void {
+    if (! in_array(DB::getDriverName(), ['mysql', 'mariadb'], true)) {
+        $this->markTestSkipped('Requires two InnoDB sessions in REPEATABLE READ.');
+    }
+
+    $credentialId = (string) Str::uuid();
+    $unrelatedId = seedFleetActivity(['description' => 'Unrelated event']);
+    $activityId = seedFleetActivity([
+        'description' => 'Invoice updated by ada@example.test',
+        'properties' => json_encode(['api_key_id' => $credentialId], JSON_THROW_ON_ERROR),
+    ]);
+    $defaultConnection = DB::getDefaultConnection();
+    config()->set('database.connections.eraser_writer', config("database.connections.{$defaultConnection}"));
+    $eraserConnection = DB::connection();
+    $writer = DB::connection('eraser_writer');
+    $eraserConnection->statement('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
+    $writer->statement('SET SESSION innodb_lock_wait_timeout = 1');
+    $eraserConnection->beginTransaction();
+
+    try {
+        expect(app(AuditEraser::class)->erase('420000', (string) Str::uuid(), AuditEraser::DELETE, [$credentialId])->changed())->toBe(1);
+
+        expect($writer->table('activity_log')->where('id', $unrelatedId)->update(['description' => 'Unrelated writer']))
+            ->toBe(1)
+            ->and($writer->table('activity_log')->insert([
+                'public_id' => (string) Str::uuid7(),
+                'description' => 'A new audit event',
+                'created_at' => '2026-11-25 12:00:00',
+            ]))->toBeTrue();
+        expect(fn () => $writer->table('activity_log')->where('id', $activityId)->update(['description' => 'Conflicting writer']))
+            ->toThrow(QueryException::class, 'Lock wait timeout');
+    } finally {
+        $eraserConnection->rollBack();
+        DB::purge('eraser_writer');
+    }
+});
+
+it('continues to the next candidate when retention removes a row before it is locked', function (): void {
+    $attributes = ['causer_type' => 'user', 'causer_id' => '420000', 'description' => 'Ed changed settings'];
+    $purgedId = seedFleetActivity($attributes);
+    $remainingId = seedFleetActivity($attributes);
+    $hasPurged = false;
+    DB::listen(function (QueryExecuted $query) use (&$hasPurged, $purgedId): void {
+        if (! $hasPurged && str_starts_with(strtolower($query->sql), 'select') && str_contains($query->sql, 'activity_log')) {
+            $hasPurged = true;
+            $query->connection->table('activity_log')->where('id', $purgedId)->delete();
+        }
+    });
+
+    $report = app(AuditEraser::class)->erase('420000', (string) Str::uuid(), AuditEraser::DELETE);
+
+    expect($hasPurged)->toBeTrue()
+        ->and($report->changed())->toBe(1)
+        ->and(DB::table('activity_log')->where('id', $remainingId)->whereNotNull('anonymised_at')->exists())->toBeTrue();
 });
 
 it('refuses a scoped run if the audit table cannot filter by organisation', function (): void {

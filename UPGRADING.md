@@ -41,7 +41,10 @@ For excubia-app, signaculum-core and instituta-core (design §6.1). externa
    eraser joins any transaction on the activity model's connection. Update
    fleet erasure listeners to use the counts-only `SubjectErasedEvent`. If the
    product replaces `AuditAnonymiser`, its binding must implement
-   `FleetAuditAnonymiserContract` to participate in fleet erasure.
+   `FleetAuditAnonymiserContract` before switching to `AuditEraser`.
+   A legacy-only binding makes fleet calls fail closed before any write or
+   event, including dry runs. Direct `AuditAnonymiser::anonymise()` calls
+   still use that binding.
 8. `activitylog:clean` can be removed from the schedule: the package
    schedules `audit:purge` daily (365 days, 730 for the security logs `auth`,
    `security`, `access` and `api-keys`). If it

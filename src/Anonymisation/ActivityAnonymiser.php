@@ -110,8 +110,8 @@ final class ActivityAnonymiser implements FleetAuditAnonymiserContract
 
     /**
      * The same scan plans and applies scrubbing, so the dry run predicts the
-     * real run without issuing any write. Real runs lock rows so concurrent
-     * erasures of the same row never write each other's personal data back.
+     * real run without issuing any write. Real runs lock by primary key to
+     * avoid InnoDB range locks during the candidate scan at REPEATABLE READ.
      *
      * @param  list<string>  $publicIds  Empty for the original anonymiser API.
      * @return array{anonymised: int, kept: int, subjectIds: int, causerIds: int}
@@ -159,13 +159,20 @@ final class ActivityAnonymiser implements FleetAuditAnonymiserContract
             $query->where('organisation_id', $organisationId);
         }
 
-        if (! $isDryRun) {
-            $query->lockForUpdate();
-        }
-
+        $candidates = $isDryRun ? $query : (clone $query)->select('id');
         $counts = ['anonymised' => 0, 'kept' => 0, 'subjectIds' => 0, 'causerIds' => 0];
 
-        foreach ($query->lazyById() as $row) {
+        foreach ($candidates->lazyById() as $row) {
+            if (! $isDryRun) {
+                // Read the current values and recheck ownership after the scan.
+                // Retention may have removed the row or another erasure scrubbed it.
+                $row = (clone $query)->where('id', $row->id)->lockForUpdate()->first();
+
+                if ($row === null) {
+                    continue;
+                }
+            }
+
             $properties = self::jsonColumn($row, 'properties');
             $hasSubjectRef = self::hasMorph($row->subject_type, $row->{$subjectIdColumn}, $subject, $publicIds);
             $hasCauserRef = self::hasMorph($row->causer_type, $row->{$causerIdColumn}, $subject, $publicIds);
@@ -175,15 +182,16 @@ final class ActivityAnonymiser implements FleetAuditAnonymiserContract
             $hasMorph = $publicIds === [] || $hasSubjectRef || $hasCauserRef;
             $hasCredential = self::hasPublicId(data_get($properties, 'api_key_id'), $publicIds);
             $hasCreator = self::hasPublicId(data_get($properties, 'api_key_created_by'), $publicIds);
+            $isOwnActivity = $hasMorph || $hasCredential;
 
-            if (! $hasMorph && ! $hasCredential && ! $hasCreator) {
+            if (! $isOwnActivity && ! $hasCreator) {
                 continue;
             }
 
             $counts['kept']++;
             $counts['subjectIds'] += $hasSubjectRef ? 1 : 0;
             $counts['causerIds'] += $hasCauserRef ? 1 : 0;
-            $updates = $this->rowUpdates($row, $properties, $subject->tombstone, $hasMorph ? $personalKeys : [], $identifiers, $hasMorph, $hasCredential);
+            $updates = $this->rowUpdates($row, $properties, $subject->tombstone, $isOwnActivity ? $personalKeys : [], $identifiers, $isOwnActivity, $hasCredential);
 
             if ($updates === [] && $row->anonymised_at !== null) {
                 continue;
@@ -300,7 +308,7 @@ final class ActivityAnonymiser implements FleetAuditAnonymiserContract
 
         foreach ($identifiers as $identifier) {
             // Whole words only: a short name (`Al`) must not corrupt `Alarm`.
-            $text = preg_replace_callback('/(?<![\p{L}\p{N}])'.preg_quote($identifier, '/').'(?![\p{L}\p{N}])/iu', $replacement, $text)
+            $text = preg_replace_callback(ErasureSubject::identifierPattern($identifier), $replacement, $text)
                 ?? throw new RuntimeException('An identifier could not be scrubbed.');
         }
 
