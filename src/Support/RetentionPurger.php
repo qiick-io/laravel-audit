@@ -130,15 +130,20 @@ final readonly class RetentionPurger
         $table = $activityModel->getTable();
         $storedCutoff = $activityModel->fromDateTime($cutoff);
         $deletedRows = 0;
+        $lastId = null;
 
         do {
             // From the writer: a lagging read replica would keep returning rows
-            // already deleted, and the loop would never finish.
+            // already deleted. Each chunk also starts after the last id read, so
+            // a snapshot that still shows rows another session deleted (MySQL
+            // REPEATABLE READ) cannot make the loop read them again.
             $query = $connection->table($table)->useWritePdo()->where('created_at', '<', $storedCutoff);
             $scopeToLogs($query);
-            $ids = $query->orderBy('id')->limit($this->chunkSize)->pluck('id')->all();
+            $ids = $query->when($lastId !== null, fn (Builder $chunkQuery) => $chunkQuery->where('id', '>', $lastId))
+                ->orderBy('id')->limit($this->chunkSize)->pluck('id')->all();
 
             if ($ids !== []) {
+                $lastId = end($ids);
                 // The cutoff is checked again in the delete itself, so a row that
                 // stopped being past its floor since the ids were read stays.
                 $deletedRows += $connection->table($table)

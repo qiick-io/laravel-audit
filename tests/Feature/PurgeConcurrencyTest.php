@@ -194,3 +194,54 @@ it('honours both floors and finishes when two sessions purge the same rows (Code
         ->and($firstSession['security'] + $secondSession['security'])->toBe(count($securityOld))
         ->and($secondSession['general'])->toBe(count($generalOld));
 });
+
+it('finishes when the purge runs inside a repeatable-read transaction and another session deletes its rows (Codex r2)', function (): void {
+    // InnoDB consistent reads: the snapshot keeps showing rows another session
+    // deleted, while the delete sees they are gone. PostgreSQL raises a
+    // serialization error in that case instead, and SQLite has one writer.
+    if (! in_array(DB::getDriverName(), ['mysql', 'mariadb'], true)) {
+        $this->markTestSkipped('Needs InnoDB repeatable-read snapshots.');
+    }
+
+    $defaultConnection = DB::getDefaultConnection();
+    config()->set('database.connections.second_session', config("database.connections.{$defaultConnection}"));
+    DB::purge('second_session');
+
+    foreach (range(1, 7) as $row) {
+        insertConcurrencyRow('default', 400);
+        insertConcurrencyRow('auth', 800);
+    }
+
+    $kept = [insertConcurrencyRow('default', 10), insertConcurrencyRow('auth', 400)];
+    $secondSession = null;
+    $selects = 0;
+
+    Event::listen(QueryExecuted::class, function (QueryExecuted $query) use (&$selects, &$secondSession, $defaultConnection): void {
+        if ($query->connectionName !== $defaultConnection || ! str_starts_with(strtolower($query->sql), 'select')) {
+            return;
+        }
+
+        if (++$selects > 20) {
+            throw new RuntimeException('The purge kept reading rows its snapshot still shows.');
+        }
+
+        if ($selects === 1) {
+            // The first session's snapshot is taken; another session purges everything now.
+            DB::setDefaultConnection('second_session');
+
+            try {
+                $secondSession = RetentionPurger::fromConfig(config())->purge(365);
+            } finally {
+                DB::setDefaultConnection($defaultConnection);
+            }
+        }
+    });
+
+    // A product job calling the clean action inside its own transaction (InnoDB default: REPEATABLE READ).
+    DB::statement('SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ');
+    $firstSession = DB::transaction(fn (): array => RetentionPurger::fromConfig(config())->purge(365));
+
+    expect($firstSession)->toBe(['general' => 0, 'security' => 0])
+        ->and($secondSession)->toBe(['general' => 7, 'security' => 7])
+        ->and(DB::table('activity_log')->orderBy('id')->pluck('id')->map(fn (mixed $id): int => (int) $id)->all())->toBe($kept);
+});

@@ -17,7 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   floor (RC review M5).
 - The purge reads the ids to delete from the write connection: with a read
   replica that lags, it kept reading rows already deleted and never finished
-  (both `audit:purge` and `activitylog:clean`).
+  (both `audit:purge` and `activitylog:clean`). Each chunk also starts after
+  the last id read, so a purge inside a MySQL `REPEATABLE READ` transaction
+  finishes when another session deletes the rows its snapshot still shows.
 
 ### Added
 
