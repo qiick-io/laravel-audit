@@ -206,6 +206,38 @@ the product's `OrganisationResolver` binding (default: none). `request_id`
 comes from the `request_id` key of Laravel's context, which
 `qiick/laravel-http-basics` sets.
 
+## Transactions
+
+- **A logged row joins the ambient transaction**, as Spatie's does: the row is
+  written with the business change it describes, and it rolls back with it.
+  The log never says that a change happened when it did not. This coupling
+  holds only on one connection: the activity model's connection (by default
+  the application's default connection) must be the one the business write
+  uses. A transaction on another connection commits and rolls back on its
+  own.
+- **Evidence of an attempt that fails** (a rejected privilege change, a
+  refused delete) is therefore lost if it is logged inside the transaction
+  that rolls back. Log such attempts outside it: before `DB::transaction()`
+  starts, or in the failure path after it has rolled back
+  (`catch (Throwable $exception) { activity('security')->...->log(...); throw $exception; }`).
+- **Buffered logging** (`activitylog.buffer.enabled`), which writes after the
+  response, is refused in production by a boot check: buffered security
+  events are lost when the process dies.
+- **Erasure joins the caller's transaction too**, as a savepoint on the
+  activity model's connection, and `ActivityAnonymised` is dispatched only
+  after the outermost commit **of that connection**: when the product's
+  erasure transaction rolls back, the anonymisation is undone and no listener
+  hears of it, whatever other connections commit meanwhile. Run the erasure
+  job's tombstoning on the same connection, or the two do not roll back
+  together.
+- **Concurrent erasures** lock the rows they read (`SELECT … FOR UPDATE` on
+  PostgreSQL, MySQL and MariaDB), so two erasures of people who share a row
+  (one causer, the other subject) run one after the other on that row and
+  neither writes back a name the other scrubbed.
+- **The retention purge** deletes in chunks, each its own statement, without
+  a transaction of its own: a run that stops halfway leaves only rows that
+  the next run deletes.
+
 ## Erasure (GDPR)
 
 The product's erasure job calls the anonymiser in the same transaction as the

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Facades\DB;
@@ -428,4 +429,111 @@ it('scrubs ip_address by default (review)', function (): void {
         'ipAddress' => TOMBSTONE,
         'actor_kind' => 'unattended',
     ]);
+});
+
+it('reports the erasure only once the caller\'s transaction commits (review M1)', function (): void {
+    Event::fake([ActivityAnonymised::class]);
+    $person = personToErase();
+    logAbout($person, null, 'logged in', ['email' => 'ada@example.com']);
+
+    DB::transaction(function () use ($person): void {
+        expect(anonymise($person))->toBe(1);
+
+        Event::assertNotDispatched(ActivityAnonymised::class);
+    });
+
+    Event::assertDispatchedTimes(ActivityAnonymised::class, 1);
+});
+
+it('never reports an erasure the caller\'s transaction rolled back (review M1)', function (): void {
+    Event::fake([ActivityAnonymised::class]);
+    $person = personToErase();
+    $activity = logAbout($person, null, 'logged in', ['email' => 'ada@example.com']);
+
+    expect(fn () => DB::transaction(function () use ($person): void {
+        anonymise($person);
+
+        throw new RuntimeException('the user tombstone failed');
+    }))->toThrow(RuntimeException::class, 'the user tombstone failed');
+
+    Event::assertNotDispatched(ActivityAnonymised::class);
+    expect(Activity::query()->findOrFail($activity->getKey())->getProperty('email'))->toBe('ada@example.com');
+});
+
+it('never reports an erasure when another connection commits and the audit connection rolls back (Codex M1)', function (): void {
+    Event::fake([ActivityAnonymised::class]);
+    config()->set('database.connections.unrelated', ['driver' => 'sqlite', 'database' => ':memory:']);
+    $person = personToErase();
+    $activity = logAbout($person, null, 'logged in', ['email' => 'ada@example.com']);
+    $auditConnection = DB::connection();
+    $unrelatedConnection = DB::connection('unrelated');
+
+    $auditConnection->beginTransaction();
+    $unrelatedConnection->beginTransaction();
+
+    anonymise($person);
+
+    $unrelatedConnection->commit();
+
+    Event::assertNotDispatched(ActivityAnonymised::class);
+
+    $auditConnection->rollBack();
+
+    Event::assertNotDispatched(ActivityAnonymised::class);
+    expect(Activity::query()->findOrFail($activity->getKey())->getProperty('email'))->toBe('ada@example.com');
+});
+
+it('reports an erasure once when the audit connection commits with another connection open (Codex M1)', function (): void {
+    Event::fake([ActivityAnonymised::class]);
+    config()->set('database.connections.unrelated', ['driver' => 'sqlite', 'database' => ':memory:']);
+    $person = personToErase();
+    logAbout($person, null, 'logged in', ['email' => 'ada@example.com']);
+    $auditConnection = DB::connection();
+    $unrelatedConnection = DB::connection('unrelated');
+
+    $auditConnection->beginTransaction();
+    $unrelatedConnection->beginTransaction();
+
+    anonymise($person);
+
+    $auditConnection->commit();
+
+    Event::assertDispatchedTimes(ActivityAnonymised::class, 1);
+
+    $unrelatedConnection->rollBack();
+
+    Event::assertDispatchedTimes(ActivityAnonymised::class, 1);
+});
+
+it('never reports an erasure when another connection opens a transaction during it and commits first (Codex r2)', function (): void {
+    Event::fake([ActivityAnonymised::class]);
+    config()->set('database.connections.unrelated', ['driver' => 'sqlite', 'database' => ':memory:']);
+    $person = personToErase();
+    $activity = logAbout($person, null, 'logged in', ['email' => 'ada@example.com']);
+    $auditConnection = DB::connection();
+    $unrelatedConnection = DB::connection('unrelated');
+    $hasOpenedUnrelated = false;
+
+    // A query listener opens bookkeeping on another connection while the erasure writes.
+    DB::listen(function (QueryExecuted $query) use (&$hasOpenedUnrelated, $auditConnection, $unrelatedConnection): void {
+        if (! $hasOpenedUnrelated && $query->connectionName === $auditConnection->getName() && str_starts_with(strtolower($query->sql), 'update')) {
+            $hasOpenedUnrelated = true;
+            $unrelatedConnection->beginTransaction();
+        }
+    });
+
+    $auditConnection->beginTransaction();
+
+    anonymise($person);
+
+    expect($hasOpenedUnrelated)->toBeTrue();
+
+    $unrelatedConnection->commit();
+
+    Event::assertNotDispatched(ActivityAnonymised::class);
+
+    $auditConnection->rollBack();
+
+    Event::assertNotDispatched(ActivityAnonymised::class);
+    expect(Activity::query()->findOrFail($activity->getKey())->getProperty('email'))->toBe('ada@example.com');
 });

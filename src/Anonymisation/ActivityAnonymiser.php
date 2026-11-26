@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Qiick\Audit\Anonymisation;
 
 use Illuminate\Database\Connection;
+use Illuminate\Database\DatabaseTransactionRecord;
+use Illuminate\Database\DatabaseTransactionsManager;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Carbon;
 use InvalidArgumentException;
@@ -92,15 +94,32 @@ final class ActivityAnonymiser implements AuditAnonymiser
                             ->orWhere(fn (Builder $refQuery) => $refQuery->where('causer_type', $ref->type)->where($causerIdColumn, $ref->id));
                     }
                 })
+                // A row can belong to two people (causer and subject): locking it
+                // makes a concurrent erasure wait for this commit and read the
+                // scrubbed row, instead of writing back its stale copy.
+                ->lockForUpdate()
                 ->lazyById()
                 ->each(function (stdClass $row) use ($activityModel, $connection, $subject, $personalKeys, $identifiers, &$anonymisedRows): void {
                     if ($this->anonymiseRow($row, $activityModel, $connection, $subject->tombstone, $personalKeys, $identifiers)) {
                         $anonymisedRows++;
                     }
                 });
-        });
 
-        event(new ActivityAnonymised($anonymisedRows, $subject->refs));
+            // Bound to this transaction's own record: Connection::afterCommit()
+            // attaches to the newest transaction on any connection, which can
+            // be one another connection opened during the erasure. The event
+            // follows the audit connection's outermost commit and is dropped
+            // when the product's erasure transaction rolls back.
+            $finalCount = $anonymisedRows;
+            $dispatch = fn () => event(new ActivityAnonymised($finalCount, $subject->refs));
+            /** @var DatabaseTransactionsManager $transactions */
+            $transactions = app('db.transactions');
+
+            $auditTransaction = $transactions->callbackApplicableTransactions()
+                ->last(fn (DatabaseTransactionRecord $transaction): bool => $transaction->connection === $connection->getName())
+                ?? throw new RuntimeException('The erasure transaction is not tracked by the transactions manager.');
+            $auditTransaction->addCallback($dispatch);
+        });
 
         return new AnonymisationReport($anonymisedRows);
     }
