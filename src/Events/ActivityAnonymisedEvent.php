@@ -13,7 +13,7 @@ use Qiick\Audit\Contracts\MorphRef;
  *
  * @api
  */
-final readonly class ActivityAnonymised
+final readonly class ActivityAnonymisedEvent
 {
     /**
      * @param  list<MorphRef>  $refs

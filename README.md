@@ -12,7 +12,8 @@
 
 PHPStan at `max` and the existing CI checks cover PHP. CodeQL covers GitHub Actions and JavaScript/TypeScript.
 
-> **In development. Not released and not on Packagist yet: do not depend on it.**
+> **Pre-release.** `0.1.0-beta.1` is on Packagist for qiick products. Do not
+> depend on it outside the fleet before `1.0.0`.
 
 Shared audit log for qiick Laravel products, on top of
 [`spatie/laravel-activitylog`](https://github.com/spatie/laravel-activitylog) v5:
@@ -28,9 +29,9 @@ Part of the qiick fleet. Binding design:
 
 ## Status
 
-Pre-release: `0.1.0-beta.1`. Public APIs may change in any 0.x release; see [UPGRADING.md](./UPGRADING.md).
-Do not require this package from production apps until a tagged release lands on
-Packagist (Packagist publish only after Luca’s go).
+Pre-release: `0.1.0-beta.1`, on Packagist. Public APIs may change in any 0.x
+release, each break recorded in [UPGRADING.md](./UPGRADING.md). The contract
+that freezes at `1.0.0` is listed in [docs/public-api.md](./docs/public-api.md#frozen-at-100).
 
 ## Requirements
 
@@ -44,12 +45,16 @@ Packagist (Packagist publish only after Luca’s go).
 - Optional: `qiick/laravel-access`, which fills `actor_kind` from its actor
   context.
 
-## Install (when published)
+## Install
 
 ```bash
 composer require qiick/laravel-audit:^0.1@beta
 php artisan vendor:publish --tag=audit-config
+php artisan migrate
 ```
+
+A product that already has its own `activity_log` table follows "Adopting the
+package in a product" in [UPGRADING.md](./UPGRADING.md) instead.
 
 ## Configuration
 
@@ -269,7 +274,7 @@ A real run dispatches `SubjectErasedEvent` with the report after the
 outermost commit on the configured activity model's connection.
 
 Direct calls to `AuditAnonymiser::anonymise()` still accept an explicit
-`ErasureSubject` and dispatch `ActivityAnonymised`. A replacement binding must
+`ErasureSubject` and dispatch `ActivityAnonymisedEvent`. A replacement binding must
 implement `FleetAuditAnonymiserContract` to support the fleet eraser.
 
 ### Erasure perimeter and caller duties
@@ -342,6 +347,18 @@ sets `activitylog.actions.clean_log` to its own clean action, so
 365 days, or a security log row younger than 730. A product that keeps it in the
 schedule loses nothing; `audit:purge` alone is enough.
 
+## Deploy check
+
+Run `php artisan audit:check` in every deploy, after `migrate`. It exits
+non-zero, naming the key, when the retention floors are invalid, when
+`audit.purge.time` is invalid while the package schedules the purge
+(`audit.purge.schedule`; a product that schedules `audit:purge` itself owns its
+time), or when the `activity_log` table (on the activity model's connection)
+lacks a column the package writes, purges or erases by, under the configured
+morph id names. The
+boot checks already stop the misconfigurations that would lose events
+(model, actions, timezone, production switches).
+
 ## Querying
 
 `Activity::query()->causedBy($user)`, `->forSubject($model)` and
@@ -370,6 +387,45 @@ Serialised rows never carry the bigint `id`; timestamps are RFC 3339 UTC.
 The security checklist maps every design risk to its tests:
 [docs/security-checklist.md](./docs/security-checklist.md). Adopting the
 package in a product: [UPGRADING.md](./UPGRADING.md).
+
+## Threat model
+
+**Assets.** The security event log every qiick product writes (who did what,
+through which credential, in which organisation), and the personal data those
+rows hold (names, emails, IP addresses, user agents).
+
+**Trust boundaries.** Callers of the logging API (product code, often fed by
+user input) are untrusted for attribution: the package writes the reserved
+keys, the organisation and the credential itself. The product's resolvers
+(`OrganisationResolver`, `AuditActorResolver`) and the erasure orchestrator are
+trusted. The application's database credentials are trusted with the table.
+
+| Threat | Control | Test |
+| --- | --- | --- |
+| Secrets reach the log | secret floor: built-in names and parts, `encrypted*` / `hashed` casts, `audit.sensitive_attributes`; a model can add excludes, never remove these | A1 |
+| Forged attribution (`api_key_id`, `ip`, `actor_kind`, organisation) | reserved keys always carry server values; `properties.organisation_id` never sets the column | A2, A3, A4 |
+| Cross-tenant reads | `forOrganisation()` excludes rows of other and of no organisation | A5 |
+| Internal ids leak | `public_id` UUID v7; bigint `id` and key ids never serialised | A6 |
+| Erasure misses rows or deletes evidence | one pass over causer, subject and credential rows; rows scrubbed with a constant tombstone, never deleted; idempotent | A7, A8, A14, E1–E14 |
+| The log is turned off or loses events | boot fails in production with the log off or buffered | A9 |
+| Log injection | stored as is; the product escapes when rendering | A10 |
+| Wrong time zone or 2038 overflow | boot check on `UTC`; `datetime`, never `TIMESTAMP`; RFC 3339 `Z` export | A13 |
+| Retention deletes early or never | two floors in one purger used by every delete path; scheduled daily by the package; invalid floors fail before any delete | retention tests |
+| Concurrent writers corrupt erasure or purge | row locks during erasure; purge deletes are idempotent and recheck the cutoff | `AnonymiserConcurrencyTest`, `PurgeConcurrencyTest` |
+
+**Out of scope, owned by the product.**
+
+- **Tamper evidence.** Anyone holding the application's database credentials
+  can change or delete rows; the table is not hash-chained (additive after
+  1.0). Products that need protected security logs (ASVS 5.0 V16.4) export
+  `audit.security_log_names` rows to a separate system the application cannot
+  modify (#24).
+- Free text the anonymiser cannot recognise, rows written after an erasure
+  run, application logs, queues, replicas and backups ("Erasure perimeter").
+- Authorization of who may read the log, and escaping when it is rendered.
+- Externa 1.x's backfill and dual write (A12).
+
+How each standard the design names is met: [docs/standards-traceability.md](./docs/standards-traceability.md).
 
 ## Deprecation policy
 

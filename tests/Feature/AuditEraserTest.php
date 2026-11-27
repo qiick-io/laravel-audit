@@ -14,7 +14,7 @@ use Qiick\Audit\Contracts\AuditAnonymiser;
 use Qiick\Audit\Erasure\AuditEraser;
 use Qiick\Audit\Erasure\ErasureReport;
 use Qiick\Audit\Erasure\OrganisationScopeUnsupportedException;
-use Qiick\Audit\Events\ActivityAnonymised;
+use Qiick\Audit\Events\ActivityAnonymisedEvent;
 use Qiick\Audit\Events\SubjectErasedEvent;
 use Qiick\Audit\Tests\Support\Models\AuthenticatableRecord;
 
@@ -83,7 +83,7 @@ it('reports exactly which evidence it touched and which cleartext references it 
     $otherType = seedFleetActivity(['causer_type' => 'document', 'causer_id' => $userId, 'organisation_id' => $tenantId]);
     $eraser = app(AuditEraser::class);
 
-    Event::fake([SubjectErasedEvent::class, ActivityAnonymised::class]);
+    Event::fake([SubjectErasedEvent::class, ActivityAnonymisedEvent::class]);
     $predicted = $eraser->erase($userId, $publicId, AuditEraser::DELETE, [$principalId], ['Ada Lovelace'], $tenantId, dryRun: true);
     Event::assertNothingDispatched();
     expect(DB::table('activity_log')->whereNotNull('anonymised_at')->count())->toBe(0);
@@ -105,7 +105,7 @@ it('reports exactly which evidence it touched and which cleartext references it 
         ->and($eraser->erase($userId, $publicId, AuditEraser::DELETE, [$principalId], ['Ada Lovelace'], $tenantId)->changed())->toBe(0);
 
     Event::assertDispatched(SubjectErasedEvent::class, fn (SubjectErasedEvent $event): bool => $event->report === $report);
-    Event::assertNotDispatched(ActivityAnonymised::class);
+    Event::assertNotDispatched(ActivityAnonymisedEvent::class);
 });
 
 it('unlinks a creator from another person’s activity without redacting the other person', function (): void {
