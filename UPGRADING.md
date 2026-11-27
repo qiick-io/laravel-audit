@@ -4,6 +4,15 @@ This package is **pre-release** (`0.x`). Breaking changes are allowed between
 minor versions while the major is `0`, and each break is recorded here before a
 tagged release.
 
+## From 0.1.0-beta.1
+
+- `Qiick\Audit\Events\ActivityAnonymised` is renamed
+  `Qiick\Audit\Events\ActivityAnonymisedEvent`, with the same `rows` and
+  `refs` payload. Update `Event::listen()` registrations, listener type hints
+  and `Event::fake()` / assertions, then rebuild the event cache if the app
+  caches discovered listeners. Drain queued listeners that hold the old class
+  before deploying.
+
 ## Migrations before 1.0.0
 
 Migrations freeze at the first stable release (`1.0.0`). Until then, schema

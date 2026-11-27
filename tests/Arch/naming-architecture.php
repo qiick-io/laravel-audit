@@ -28,10 +28,6 @@ return [
             'Qiick\Audit\Contracts\MorphRef',
             'Qiick\Audit\Contracts\AnonymisationReport',
         ],
-        'Events' => [
-            // Design §4 names the event ActivityAnonymised.
-            'Qiick\Audit\Events\ActivityAnonymised',
-        ],
         'traits' => [
             // Design §4: the trait is Qiick\Audit\Concerns\LogsActivity, the
             // name of the Spatie trait it replaces in every product model.

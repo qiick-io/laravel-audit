@@ -269,7 +269,7 @@ A real run dispatches `SubjectErasedEvent` with the report after the
 outermost commit on the configured activity model's connection.
 
 Direct calls to `AuditAnonymiser::anonymise()` still accept an explicit
-`ErasureSubject` and dispatch `ActivityAnonymised`. A replacement binding must
+`ErasureSubject` and dispatch `ActivityAnonymisedEvent`. A replacement binding must
 implement `FleetAuditAnonymiserContract` to support the fleet eraser.
 
 ### Erasure perimeter and caller duties

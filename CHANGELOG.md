@@ -24,6 +24,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   or skip the `activity_log` migration. A block that is not an array fails at
   boot with its key name (F1, #11).
 
+### Changed
+
+- **Breaking:** `Events\ActivityAnonymised` is now `Events\ActivityAnonymisedEvent`
+  (fleet convention F5: event classes end in `Event`). The payload is the
+  same. See UPGRADING.md.
+
 ## [0.1.0-beta.1] - 2026-11-26
 
 First pre-release. Before `1.0.0` any minor version may break the public API
