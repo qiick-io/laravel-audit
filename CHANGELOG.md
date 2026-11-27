@@ -20,7 +20,7 @@ Second pre-release, the 1.0 release candidate contract: what freezes at
 - Rename listeners and fakes of `ActivityAnonymised` to
   `ActivityAnonymisedEvent`, wire `AuditEraser` into the product's erasure
   orchestrator, and add `php artisan audit:check` to the deploy: see
-  "From 0.1.0-beta.1" in `UPGRADING.md`.
+  "From 0.1.0-beta.1 to 0.1.0-beta.2" in `UPGRADING.md`.
 
 ### Added
 
@@ -30,16 +30,6 @@ Second pre-release, the 1.0 release candidate contract: what freezes at
   retention floors, on an invalid purge time while the package schedules the
   purge, and on an `activity_log` table that lacks a column the package
   writes, purges or erases by.
-
-### Fixed
-
-- A `config/audit.php` published before a nested key existed no longer loses
-  it: every key left out of `purge`, `migrations` or `columns` takes the
-  package default, so an older file cannot silently stop the scheduled purge
-  or skip the `activity_log` migration. A block that is not an array, or an
-  `audit.purge.schedule` / `audit.migrations.load` that is not a boolean (a
-  string `'true'` from an env file), fails at boot with its key name (F1, #11).
-
 - README threat model, `docs/standards-traceability.md` (MUST / SHOULD /
   LATER mapping) and the "Frozen at 1.0.0" contract in `docs/public-api.md`.
 - CI on app-ui's shared package matrix, without PHP 8.3 (Spatie activitylog
@@ -50,19 +40,19 @@ Second pre-release, the 1.0 release candidate contract: what freezes at
 - **Breaking:** `Events\ActivityAnonymised` is now `Events\ActivityAnonymisedEvent`
   (fleet convention F5: event classes end in `Event`). The payload is the
   same. See UPGRADING.md.
-
-### Changed
-
-- **Breaking:** `Events\ActivityAnonymised` is now `Events\ActivityAnonymisedEvent`
-  (fleet convention F5: event classes end in `Event`). The payload is the
-  same. See UPGRADING.md.
-
-### Changed
-
 - Erasure keeps another subject's attributes in a row the person only caused
   (a project they renamed keeps its name): `attribute_changes` lose only the
   person's identifiers, email addresses and phone numbers there; `properties`
   still lose every personal key.
+
+### Fixed
+
+- A `config/audit.php` published before a nested key existed no longer loses
+  it: every key left out of `purge`, `migrations` or `columns` takes the
+  package default, so an older file cannot silently stop the scheduled purge
+  or skip the `activity_log` migration. A block that is not an array, or an
+  `audit.purge.schedule` / `audit.migrations.load` that is not a boolean (a
+  string `'true'` from an env file), fails at boot with its key name (F1, #11).
 
 ## [0.1.0-beta.1] - 2026-11-26
 
