@@ -8,6 +8,10 @@
 
 # qiick/laravel-audit
 
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/qiick-io/laravel-audit/badge)](https://scorecard.dev/viewer/?uri=github.com/qiick-io/laravel-audit)
+
+PHPStan at `max` and the existing CI checks cover PHP. CodeQL covers GitHub Actions and JavaScript/TypeScript.
+
 > **In development. Not released and not on Packagist yet: do not depend on it.**
 
 Shared audit log for qiick Laravel products, on top of
