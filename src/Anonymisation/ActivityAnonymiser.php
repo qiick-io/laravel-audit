@@ -11,7 +11,7 @@ use Qiick\Audit\Contracts\AnonymisationReport;
 use Qiick\Audit\Contracts\ErasureSubject;
 use Qiick\Audit\Contracts\FleetAuditAnonymiserContract;
 use Qiick\Audit\Erasure\ErasureReport;
-use Qiick\Audit\Events\ActivityAnonymised;
+use Qiick\Audit\Events\ActivityAnonymisedEvent;
 use Qiick\Audit\Models\Activity;
 use Qiick\Audit\Support\AuditCommitService;
 use Qiick\Audit\Support\SecretAttributeFloor;
@@ -73,7 +73,7 @@ final class ActivityAnonymiser implements FleetAuditAnonymiserContract
 
         return $connection->transaction(function () use ($activityModel, $connection, $subject): AnonymisationReport {
             $counts = $this->scrubRows($activityModel, $subject);
-            AuditCommitService::afterCommit($connection, fn () => event(new ActivityAnonymised($counts['anonymised'], $subject->refs)));
+            AuditCommitService::afterCommit($connection, fn () => event(new ActivityAnonymisedEvent($counts['anonymised'], $subject->refs)));
 
             return new AnonymisationReport($counts['anonymised']);
         });

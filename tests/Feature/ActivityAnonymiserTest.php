@@ -15,7 +15,7 @@ use Qiick\Audit\Anonymisation\ActivityAnonymiser;
 use Qiick\Audit\Contracts\AuditAnonymiser;
 use Qiick\Audit\Contracts\ErasureSubject;
 use Qiick\Audit\Contracts\MorphRef;
-use Qiick\Audit\Events\ActivityAnonymised;
+use Qiick\Audit\Events\ActivityAnonymisedEvent;
 use Qiick\Audit\Models\Activity;
 use Qiick\Audit\Tests\Support\CreatesKeyedRecordTables;
 use Qiick\Audit\Tests\Support\Models\AuthenticatableRecord;
@@ -335,14 +335,14 @@ it('follows the configured morph columns', function (): void {
         ->and(Activity::query()->findOrFail($activity->getKey())->getProperty('email'))->toBe(TOMBSTONE);
 });
 
-it('dispatches ActivityAnonymised with the row count and the refs', function (): void {
-    Event::fake([ActivityAnonymised::class]);
+it('dispatches ActivityAnonymisedEvent with the row count and the refs', function (): void {
+    Event::fake([ActivityAnonymisedEvent::class]);
     $person = personToErase();
     logAbout($person, null, 'logged in');
 
     anonymise($person);
 
-    Event::assertDispatched(ActivityAnonymised::class, fn (ActivityAnonymised $event): bool => $event->rows === 1
+    Event::assertDispatched(ActivityAnonymisedEvent::class, fn (ActivityAnonymisedEvent $event): bool => $event->rows === 1
         && $event->refs == [MorphRef::of($person)]);
 });
 
@@ -432,21 +432,21 @@ it('scrubs ip_address by default (review)', function (): void {
 });
 
 it('reports the erasure only once the caller\'s transaction commits (review M1)', function (): void {
-    Event::fake([ActivityAnonymised::class]);
+    Event::fake([ActivityAnonymisedEvent::class]);
     $person = personToErase();
     logAbout($person, null, 'logged in', ['email' => 'ada@example.com']);
 
     DB::transaction(function () use ($person): void {
         expect(anonymise($person))->toBe(1);
 
-        Event::assertNotDispatched(ActivityAnonymised::class);
+        Event::assertNotDispatched(ActivityAnonymisedEvent::class);
     });
 
-    Event::assertDispatchedTimes(ActivityAnonymised::class, 1);
+    Event::assertDispatchedTimes(ActivityAnonymisedEvent::class, 1);
 });
 
 it('never reports an erasure the caller\'s transaction rolled back (review M1)', function (): void {
-    Event::fake([ActivityAnonymised::class]);
+    Event::fake([ActivityAnonymisedEvent::class]);
     $person = personToErase();
     $activity = logAbout($person, null, 'logged in', ['email' => 'ada@example.com']);
 
@@ -456,12 +456,12 @@ it('never reports an erasure the caller\'s transaction rolled back (review M1)',
         throw new RuntimeException('the user tombstone failed');
     }))->toThrow(RuntimeException::class, 'the user tombstone failed');
 
-    Event::assertNotDispatched(ActivityAnonymised::class);
+    Event::assertNotDispatched(ActivityAnonymisedEvent::class);
     expect(Activity::query()->findOrFail($activity->getKey())->getProperty('email'))->toBe('ada@example.com');
 });
 
 it('never reports an erasure when another connection commits and the audit connection rolls back (Codex M1)', function (): void {
-    Event::fake([ActivityAnonymised::class]);
+    Event::fake([ActivityAnonymisedEvent::class]);
     config()->set('database.connections.unrelated', ['driver' => 'sqlite', 'database' => ':memory:']);
     $person = personToErase();
     $activity = logAbout($person, null, 'logged in', ['email' => 'ada@example.com']);
@@ -475,16 +475,16 @@ it('never reports an erasure when another connection commits and the audit conne
 
     $unrelatedConnection->commit();
 
-    Event::assertNotDispatched(ActivityAnonymised::class);
+    Event::assertNotDispatched(ActivityAnonymisedEvent::class);
 
     $auditConnection->rollBack();
 
-    Event::assertNotDispatched(ActivityAnonymised::class);
+    Event::assertNotDispatched(ActivityAnonymisedEvent::class);
     expect(Activity::query()->findOrFail($activity->getKey())->getProperty('email'))->toBe('ada@example.com');
 });
 
 it('reports an erasure once when the audit connection commits with another connection open (Codex M1)', function (): void {
-    Event::fake([ActivityAnonymised::class]);
+    Event::fake([ActivityAnonymisedEvent::class]);
     config()->set('database.connections.unrelated', ['driver' => 'sqlite', 'database' => ':memory:']);
     $person = personToErase();
     logAbout($person, null, 'logged in', ['email' => 'ada@example.com']);
@@ -498,15 +498,15 @@ it('reports an erasure once when the audit connection commits with another conne
 
     $auditConnection->commit();
 
-    Event::assertDispatchedTimes(ActivityAnonymised::class, 1);
+    Event::assertDispatchedTimes(ActivityAnonymisedEvent::class, 1);
 
     $unrelatedConnection->rollBack();
 
-    Event::assertDispatchedTimes(ActivityAnonymised::class, 1);
+    Event::assertDispatchedTimes(ActivityAnonymisedEvent::class, 1);
 });
 
 it('never reports an erasure when another connection opens a transaction during it and commits first (Codex r2)', function (): void {
-    Event::fake([ActivityAnonymised::class]);
+    Event::fake([ActivityAnonymisedEvent::class]);
     config()->set('database.connections.unrelated', ['driver' => 'sqlite', 'database' => ':memory:']);
     $person = personToErase();
     $activity = logAbout($person, null, 'logged in', ['email' => 'ada@example.com']);
@@ -530,10 +530,10 @@ it('never reports an erasure when another connection opens a transaction during 
 
     $unrelatedConnection->commit();
 
-    Event::assertNotDispatched(ActivityAnonymised::class);
+    Event::assertNotDispatched(ActivityAnonymisedEvent::class);
 
     $auditConnection->rollBack();
 
-    Event::assertNotDispatched(ActivityAnonymised::class);
+    Event::assertNotDispatched(ActivityAnonymisedEvent::class);
     expect(Activity::query()->findOrFail($activity->getKey())->getProperty('email'))->toBe('ada@example.com');
 });
