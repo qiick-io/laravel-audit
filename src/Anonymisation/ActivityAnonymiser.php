@@ -191,7 +191,14 @@ final class ActivityAnonymiser implements FleetAuditAnonymiserContract
             $counts['kept']++;
             $counts['subjectIds'] += $hasSubjectRef ? 1 : 0;
             $counts['causerIds'] += $hasCauserRef ? 1 : 0;
-            $updates = $this->rowUpdates($row, $properties, $subject->tombstone, $isOwnActivity ? $personalKeys : [], $identifiers, $isOwnActivity, $hasCredential);
+            // A row the person only caused about another subject is evidence
+            // about that subject: `properties` (the request's context) lose
+            // every personal key, the subject's `attribute_changes` only the
+            // person's identifiers, emails and phone numbers, so the other
+            // subject's attributes stay (decision 2026-11-27).
+            $isCauserOnly = $hasCauserRef && ! $hasSubjectRef && ! $hasCredential && $row->subject_type !== null;
+            $propertyKeys = $isOwnActivity ? $personalKeys : [];
+            $updates = $this->rowUpdates($row, $properties, $subject->tombstone, $propertyKeys, $isCauserOnly ? [] : $propertyKeys, $identifiers, $isOwnActivity, $hasCredential);
 
             if ($updates === [] && $row->anonymised_at !== null) {
                 continue;
@@ -227,7 +234,8 @@ final class ActivityAnonymiser implements FleetAuditAnonymiserContract
      * Scrub the supplied identifiers there without blanking the other
      * person's names, email addresses, IP address or user agent.
      *
-     * @param  list<string>  $personalKeys  normalised (SecretAttributeFloor::normalise())
+     * @param  list<string>  $propertyKeys  scrubbed in `properties`, normalised (SecretAttributeFloor::normalise())
+     * @param  list<string>  $changeKeys  scrubbed in `attribute_changes`, normalised
      * @param  list<string>  $identifiers  longest first
      * @return array<string, string>
      */
@@ -235,7 +243,8 @@ final class ActivityAnonymiser implements FleetAuditAnonymiserContract
         stdClass $row,
         mixed $properties,
         string $tombstone,
-        array $personalKeys,
+        array $propertyKeys,
+        array $changeKeys,
         array $identifiers,
         bool $shouldScrubPatterns,
         bool $hasCredential,
@@ -249,7 +258,7 @@ final class ActivityAnonymiser implements FleetAuditAnonymiserContract
             $updates['description'] = $scrubbedDescription;
         }
 
-        $propertyKeys = $hasCredential ? [...$personalKeys, 'apikeyprefix'] : $personalKeys;
+        $propertyKeys = $hasCredential ? [...$propertyKeys, 'apikeyprefix'] : $propertyKeys;
         $scrubbedProperties = $this->scrubValue($properties, $propertyKeys, $identifiers, $tombstone, $shouldScrubPatterns);
 
         if ($scrubbedProperties !== $properties) {
@@ -257,7 +266,7 @@ final class ActivityAnonymiser implements FleetAuditAnonymiserContract
         }
 
         $changes = self::jsonColumn($row, 'attribute_changes');
-        $scrubbedChanges = $this->scrubValue($changes, $personalKeys, $identifiers, $tombstone, $shouldScrubPatterns);
+        $scrubbedChanges = $this->scrubValue($changes, $changeKeys, $identifiers, $tombstone, $shouldScrubPatterns);
 
         if ($scrubbedChanges !== $changes) {
             $updates['attribute_changes'] = json_encode($scrubbedChanges, JSON_THROW_ON_ERROR);

@@ -57,6 +57,13 @@ Second pre-release, the 1.0 release candidate contract: what freezes at
   (fleet convention F5: event classes end in `Event`). The payload is the
   same. See UPGRADING.md.
 
+### Changed
+
+- Erasure keeps another subject's attributes in a row the person only caused
+  (a project they renamed keeps its name): `attribute_changes` lose only the
+  person's identifiers, email addresses and phone numbers there; `properties`
+  still lose every personal key.
+
 ## [0.1.0-beta.1] - 2026-11-26
 
 First pre-release. Before `1.0.0` any minor version may break the public API
