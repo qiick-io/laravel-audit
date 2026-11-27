@@ -17,7 +17,9 @@ refresh is needed.
 - **Deploy.** Add `php artisan audit:check` after `migrate`.
 - **Config.** An older published `config/audit.php` keeps working: missing
   nested keys take the package defaults. A `purge`, `migrations` or `columns`
-  block that is not an array now fails at boot.
+  block that is not an array now fails at boot. New key
+  `audit.erasure_tombstone` (default `erased`): the one replacement fleet
+  erasure writes for everyone.
 - `Qiick\Audit\Events\ActivityAnonymised` is renamed
   `Qiick\Audit\Events\ActivityAnonymisedEvent`, with the same `rows` and
   `refs` payload. Update `Event::listen()` registrations, listener type hints
