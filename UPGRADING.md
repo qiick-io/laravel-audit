@@ -4,6 +4,14 @@ This package is **pre-release** (`0.x`). Breaking changes are allowed between
 minor versions while the major is `0`, and each break is recorded here before a
 tagged release.
 
+## Erasure scope after 0.1.0-beta.1
+
+In a row the erased person only caused about another subject, the subject's
+`attribute_changes` now keep their keys (a project's `name` stays); only the
+person's identifiers, email addresses and phone numbers are replaced. A
+product that relied on those attributes being blanked passes the values it
+must remove as `identifiers`.
+
 ## Migrations before 1.0.0
 
 Migrations freeze at the first stable release (`1.0.0`). Until then, schema

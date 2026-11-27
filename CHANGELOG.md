@@ -13,6 +13,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fleet-standard `AuditEraser` for full and organisation-scoped erasure, with
   dry-run counts and a counts-only event after the audit transaction commits.
 
+### Changed
+
+- Erasure keeps another subject's attributes in a row the person only caused
+  (a project they renamed keeps its name): `attribute_changes` lose only the
+  person's identifiers, email addresses and phone numbers there; `properties`
+  still lose every personal key.
+
 ## [0.1.0-beta.1] - 2026-11-26
 
 First pre-release. Before `1.0.0` any minor version may break the public API
