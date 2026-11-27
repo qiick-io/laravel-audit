@@ -96,8 +96,8 @@ Written by the package on every row, never by callers (design §3.1): `ip`,
   is false). Spatie's `activitylog:clean` stays available and goes through the
   same retention floors.
 - `audit:check` (the deploy check: exits non-zero when the retention floors,
-  the purge time or the `activity_log` table with its configured morph columns
-  are wrong).
+  the purge time of the package schedule or the `activity_log` columns, under
+  the configured morph names, are wrong).
 
 ## Publish tags
 

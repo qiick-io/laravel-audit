@@ -27,8 +27,9 @@ Second pre-release, the 1.0 release candidate contract: what freezes at
 - Fleet-standard `AuditEraser` for full and organisation-scoped erasure, with
   dry-run counts and a counts-only event after the audit transaction commits.
 - `php artisan audit:check`, the deploy check (F2): it fails on invalid
-  retention floors or purge time, and on an `activity_log` table that lacks
-  the configured morph id columns.
+  retention floors, on an invalid purge time while the package schedules the
+  purge, and on an `activity_log` table that lacks a column the package
+  writes, purges or erases by.
 
 ### Fixed
 
