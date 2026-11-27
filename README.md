@@ -12,7 +12,7 @@
 
 PHPStan at `max` and the existing CI checks cover PHP. CodeQL covers GitHub Actions and JavaScript/TypeScript.
 
-> **Pre-release.** `0.1.0-beta.1` is on Packagist for qiick products. Do not
+> **Pre-release.** `0.1.0-beta.2` is on Packagist for qiick products. Do not
 > depend on it outside the fleet before `1.0.0`.
 
 Shared audit log for qiick Laravel products, on top of
@@ -29,7 +29,7 @@ Part of the qiick fleet. Binding design:
 
 ## Status
 
-Pre-release: `0.1.0-beta.1`, on Packagist. Public APIs may change in any 0.x
+Pre-release: `0.1.0-beta.2`, on Packagist. Public APIs may change in any 0.x
 release, each break recorded in [UPGRADING.md](./UPGRADING.md). The contract
 that freezes at `1.0.0` is listed in [docs/public-api.md](./docs/public-api.md#frozen-at-100).
 

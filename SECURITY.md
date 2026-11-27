@@ -4,8 +4,8 @@
 
 | Version | Security fixes |
 | --- | --- |
-| Untagged `develop` / pre-`0.1.0` | Best effort while the package is in development. |
-| Tagged `0.x` / `1.x` (once published) | Documented here when the first tag lands. |
+| Latest `0.1.0-beta.*` | Fixed in the next beta. Older betas are not patched: upgrade. |
+| Untagged `develop` | Best effort; never a production dependency. |
 
 ## Reporting a vulnerability
 

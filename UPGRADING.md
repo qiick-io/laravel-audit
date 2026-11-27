@@ -4,8 +4,20 @@ This package is **pre-release** (`0.x`). Breaking changes are allowed between
 minor versions while the major is `0`, and each break is recorded here before a
 tagged release.
 
-## From 0.1.0-beta.1
+## From 0.1.0-beta.1 to 0.1.0-beta.2
 
+No schema change: the `activity_log` migration is unchanged, so no database
+refresh is needed.
+
+- **Erasure.** `Qiick\Audit\Erasure\AuditEraser` is new: call it from the
+  product's erasure orchestrator instead of `AuditAnonymiser::anonymise()`
+  (step 7 of "Adopting the package in a product" below), and listen to
+  `SubjectErasedEvent` (counts only) for reporting. A product that bound its
+  own `AuditAnonymiser` implements `FleetAuditAnonymiserContract` first.
+- **Deploy.** Add `php artisan audit:check` after `migrate`.
+- **Config.** An older published `config/audit.php` keeps working: missing
+  nested keys take the package defaults. A `purge`, `migrations` or `columns`
+  block that is not an array now fails at boot.
 - `Qiick\Audit\Events\ActivityAnonymised` is renamed
   `Qiick\Audit\Events\ActivityAnonymisedEvent`, with the same `rows` and
   `refs` payload. Update `Event::listen()` registrations, listener type hints

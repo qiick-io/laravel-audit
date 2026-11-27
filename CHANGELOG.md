@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-beta.2] - 2026-11-27
+
+Second pre-release, the 1.0 release candidate contract: what freezes at
+`1.0.0` is listed in `docs/public-api.md`.
+
+### Upgrade notes
+
+- No schema change: the `activity_log` migration is the same as in
+  `0.1.0-beta.1`, so no database refresh is needed.
+- Rename listeners and fakes of `ActivityAnonymised` to
+  `ActivityAnonymisedEvent`, wire `AuditEraser` into the product's erasure
+  orchestrator, and add `php artisan audit:check` to the deploy: see
+  "From 0.1.0-beta.1" in `UPGRADING.md`.
+
 ### Added
 
 - Fleet-standard `AuditEraser` for full and organisation-scoped erasure, with
@@ -23,6 +37,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   package default, so an older file cannot silently stop the scheduled purge
   or skip the `activity_log` migration. A block that is not an array fails at
   boot with its key name (F1, #11).
+
+- README threat model, `docs/standards-traceability.md` (MUST / SHOULD /
+  LATER mapping) and the "Frozen at 1.0.0" contract in `docs/public-api.md`.
+- CI on app-ui's shared package matrix, without PHP 8.3 (Spatie activitylog
+  v5 requires 8.4), and a whole-source mutation gate.
 
 ### Changed
 
@@ -203,5 +222,6 @@ First pre-release. Before `1.0.0` any minor version may break the public API
   `composer.json` `require` entry with constraint rationale, usage,
   maintainer, license, known risk and an in-package exit plan.
 
-[Unreleased]: https://github.com/qiick-io/laravel-audit/compare/v0.1.0-beta.1...HEAD
+[Unreleased]: https://github.com/qiick-io/laravel-audit/compare/v0.1.0-beta.2...HEAD
+[0.1.0-beta.2]: https://github.com/qiick-io/laravel-audit/compare/v0.1.0-beta.1...v0.1.0-beta.2
 [0.1.0-beta.1]: https://github.com/qiick-io/laravel-audit/releases/tag/v0.1.0-beta.1
