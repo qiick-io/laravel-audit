@@ -8,6 +8,7 @@ use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Routing\Events\RouteMatched;
 use Illuminate\Support\ServiceProvider;
 use InvalidArgumentException;
+use LogicException;
 use Qiick\Audit\Actions\CleanActivityLogAction;
 use Qiick\Audit\Actions\LogActivityAction;
 use Qiick\Audit\Anonymisation\ActivityAnonymiser;
@@ -47,6 +48,47 @@ final class AuditServiceProvider extends ServiceProvider
         $this->app->bindIf(AuditActorResolver::class, RequestAttributeActorResolver::class);
         $this->app->bindIf(OrganisationResolver::class, NullOrganisationResolver::class);
         $this->app->bindIf(AuditAnonymiser::class, ActivityAnonymiser::class);
+    }
+
+    /**
+     * F1: mergeConfigFrom() merges only the top level, so a config/audit.php
+     * published before a nested key existed would lose it, and a missing
+     * `purge.schedule` or `migrations.load` would silently turn the purge or
+     * the table off. Each nested block gets the package default for every key
+     * the product left out. Only these associative blocks are filled: lists
+     * such as `security_log_names` stay exactly as the product wrote them.
+     *
+     * @throws InvalidArgumentException when a nested block is not an array, or
+     *                                  a switch of it is not a boolean.
+     */
+    private function fillTheNestedDefaults(): void
+    {
+        $config = $this->app->make('config');
+        $packageDefaults = require __DIR__.'/../../config/audit.php';
+
+        foreach (['purge', 'migrations', 'columns'] as $block) {
+            $configuredBlock = $config->get("audit.{$block}");
+
+            if (! is_array($configuredBlock)) {
+                throw new InvalidArgumentException("audit.{$block} must be an array.");
+            }
+
+            $defaultBlock = is_array($packageDefaults) ? $packageDefaults[$block] : null;
+
+            if (! is_array($defaultBlock)) {
+                throw new LogicException("The package config has no audit.{$block} block.");
+            }
+
+            $config->set("audit.{$block}", array_merge($defaultBlock, $configuredBlock));
+        }
+
+        // A string 'true' would leave the purge unscheduled or the table
+        // missing without a word: the switches take booleans only.
+        foreach (['audit.purge.schedule', 'audit.migrations.load'] as $switch) {
+            if (! is_bool($config->get($switch))) {
+                throw new InvalidArgumentException("{$switch} must be true or false.");
+            }
+        }
     }
 
     /**
@@ -113,6 +155,7 @@ final class AuditServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        $this->fillTheNestedDefaults();
         $this->useThePackageModelAndAction();
 
         (new AuditBootChecks($this->app->make('config'), $this->app->isProduction()))->assert();

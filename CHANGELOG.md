@@ -19,6 +19,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (fleet convention F5: event classes end in `Event`). The payload is the
   same. See UPGRADING.md.
 
+### Fixed
+
+- A `config/audit.php` published before a nested key existed no longer loses
+  it: every key left out of `purge`, `migrations` or `columns` takes the
+  package default, so an older file cannot silently stop the scheduled purge
+  or skip the `activity_log` migration. A block that is not an array, or an
+  `audit.purge.schedule` / `audit.migrations.load` that is not a boolean (a
+  string `'true'` from an env file), fails at boot with its key name (F1, #11).
+
 ## [0.1.0-beta.1] - 2026-11-26
 
 First pre-release. Before `1.0.0` any minor version may break the public API
