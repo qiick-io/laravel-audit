@@ -20,6 +20,7 @@ CLASSES=(
   'Qiick\Audit\Support\RetentionPurger'
   'Qiick\Audit\Actions\CleanActivityLogAction'
   'Qiick\Audit\Console\Commands\PurgeActivityLogCommand'
+  'Qiick\Audit\Console\Commands\CheckAuditCommand'
   'Qiick\Audit\Anonymisation\ActivityAnonymiser'
   'Qiick\Audit\Contracts\ErasureSubject'
   'Qiick\Audit\Contracts\MorphRef'

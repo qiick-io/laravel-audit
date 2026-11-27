@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fleet-standard `AuditEraser` for full and organisation-scoped erasure, with
   dry-run counts and a counts-only event after the audit transaction commits.
+- `php artisan audit:check`, the deploy check (F2): it fails on invalid
+  retention floors or purge time, and on an `activity_log` table that lacks
+  the configured morph id columns.
 
 ### Fixed
 
