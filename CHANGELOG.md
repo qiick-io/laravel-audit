@@ -35,8 +35,9 @@ Second pre-release, the 1.0 release candidate contract: what freezes at
 - A `config/audit.php` published before a nested key existed no longer loses
   it: every key left out of `purge`, `migrations` or `columns` takes the
   package default, so an older file cannot silently stop the scheduled purge
-  or skip the `activity_log` migration. A block that is not an array fails at
-  boot with its key name (F1, #11).
+  or skip the `activity_log` migration. A block that is not an array, or an
+  `audit.purge.schedule` / `audit.migrations.load` that is not a boolean (a
+  string `'true'` from an env file), fails at boot with its key name (F1, #11).
 
 - README threat model, `docs/standards-traceability.md` (MUST / SHOULD /
   LATER mapping) and the "Frozen at 1.0.0" contract in `docs/public-api.md`.

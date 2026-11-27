@@ -59,7 +59,8 @@ final class AuditServiceProvider extends ServiceProvider
      * the product left out. Only these associative blocks are filled: lists
      * such as `security_log_names` stay exactly as the product wrote them.
      *
-     * @throws InvalidArgumentException when a nested block is not an array.
+     * @throws InvalidArgumentException when a nested block is not an array, or
+     *                                  a switch of it is not a boolean.
      */
     private function fillTheNestedDefaults(): void
     {
@@ -80,6 +81,14 @@ final class AuditServiceProvider extends ServiceProvider
             }
 
             $config->set("audit.{$block}", array_merge($defaultBlock, $configuredBlock));
+        }
+
+        // A string 'true' would leave the purge unscheduled or the table
+        // missing without a word: the switches take booleans only.
+        foreach (['audit.purge.schedule', 'audit.migrations.load'] as $switch) {
+            if (! is_bool($config->get($switch))) {
+                throw new InvalidArgumentException("{$switch} must be true or false.");
+            }
         }
     }
 
