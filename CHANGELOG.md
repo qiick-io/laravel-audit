@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fleet-standard `AuditEraser` for full and organisation-scoped erasure, with
   dry-run counts and a counts-only event after the audit transaction commits.
 
+### Changed
+
+- **Breaking:** `Events\ActivityAnonymised` is now `Events\ActivityAnonymisedEvent`
+  (fleet convention F5: event classes end in `Event`). The payload is the
+  same. See UPGRADING.md.
+
 ## [0.1.0-beta.1] - 2026-11-26
 
 First pre-release. Before `1.0.0` any minor version may break the public API
