@@ -49,6 +49,12 @@ Second pre-release, the 1.0 release candidate contract: what freezes at
   (fleet convention F5: event classes end in `Event`). The payload is the
   same. See UPGRADING.md.
 
+### Changed
+
+- **Breaking:** `Events\ActivityAnonymised` is now `Events\ActivityAnonymisedEvent`
+  (fleet convention F5: event classes end in `Event`). The payload is the
+  same. See UPGRADING.md.
+
 ## [0.1.0-beta.1] - 2026-11-26
 
 First pre-release. Before `1.0.0` any minor version may break the public API
