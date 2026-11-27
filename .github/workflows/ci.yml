@@ -24,10 +24,10 @@ jobs:
   # docs/package-matrix.md). spatie/laravel-activitylog v5 requires PHP 8.4,
   # so this package excludes 8.3 (design §10, the one fleet exception).
   package-matrix:
-    # qiick-io/app-ui@v0.15.0
-    uses: qiick-io/app-ui/.github/workflows/package-matrix.yml@0d97ae1429a856411c76e6de1ec258cae0eabab6 # v0.15.0
+    # qiick-io/app-ui develop after #289 (database jobs on every non-docs PR)
+    uses: qiick-io/app-ui/.github/workflows/package-matrix.yml@94753d4fb73913f6b5a3a5d0a685357b70829391 # develop
     with:
-      app-ui-ref: 0d97ae1429a856411c76e6de1ec258cae0eabab6
+      app-ui-ref: 94753d4fb73913f6b5a3a5d0a685357b70829391
       exclude-php-versions: '["8.3"]'
 
   tests:
@@ -267,8 +267,8 @@ jobs:
         run: test "$SHARDS_RESULT" = success
 
   standards:
-    # qiick-io/app-ui@v0.15.0
-    uses: qiick-io/app-ui/.github/workflows/drift-check.yml@0d97ae1429a856411c76e6de1ec258cae0eabab6 # v0.15.0
+    # qiick-io/app-ui develop after #289
+    uses: qiick-io/app-ui/.github/workflows/drift-check.yml@94753d4fb73913f6b5a3a5d0a685357b70829391 # develop
     with:
       standards: true
       registry: false
