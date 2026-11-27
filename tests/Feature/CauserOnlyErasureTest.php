@@ -52,6 +52,7 @@ function seedCausedActivity(string $subjectType, string $subjectId, string $caus
 }
 
 /** @return array<string, mixed> */
+// toEqual, not toBe: MySQL's JSON type reorders object keys.
 function erasedActivityJson(int $activityId, string $column): array
 {
     return json_decode((string) DB::table('activity_log')->where('id', $activityId)->value($column), true);
@@ -75,10 +76,10 @@ it('keeps the other subject\'s attributes in a row the person only caused', func
 
     eraseAda('42');
 
-    expect(erasedActivityJson($activityId, 'attribute_changes'))->toBe([
+    expect(erasedActivityJson($activityId, 'attribute_changes'))->toEqual([
         'attributes' => ['name' => 'Shop', 'username' => 'shop-bot'],
         'old' => ['name' => 'Store'],
-    ])->and(erasedActivityJson($activityId, 'properties'))->toBe(['ip' => 'erased', 'user_agent' => 'erased', 'email' => 'erased', 'source' => 'settings page']);
+    ])->and(erasedActivityJson($activityId, 'properties'))->toEqual(['ip' => 'erased', 'user_agent' => 'erased', 'email' => 'erased', 'source' => 'settings page']);
 });
 
 it('scrubs the person\'s identifiers inside the other subject\'s attributes', function (): void {
@@ -88,7 +89,7 @@ it('scrubs the person\'s identifiers inside the other subject\'s attributes', fu
 
     eraseAda('42');
 
-    expect(erasedActivityJson($activityId, 'attribute_changes'))->toBe([
+    expect(erasedActivityJson($activityId, 'attribute_changes'))->toEqual([
         'attributes' => ['title' => 'Login broken', 'assigned_to' => 'erased', 'reporter_email' => 'erased', 'owner' => 'erased'],
     ]);
 });
@@ -100,9 +101,9 @@ it('scrubs every personal key where the person is the subject', function (): voi
 
     eraseAda('42');
 
-    expect(erasedActivityJson($activityId, 'attribute_changes'))->toBe([
+    expect(erasedActivityJson($activityId, 'attribute_changes'))->toEqual([
         'attributes' => ['name' => 'erased', 'username' => 'erased', 'role' => 'admin'],
-    ])->and(erasedActivityJson($activityId, 'properties'))->toBe(['ip' => 'erased']);
+    ])->and(erasedActivityJson($activityId, 'properties'))->toEqual(['ip' => 'erased']);
 });
 
 it('scrubs every personal key where the person is the credential', function (): void {
@@ -113,7 +114,7 @@ it('scrubs every personal key where the person is the credential', function (): 
 
     app(AuditEraser::class)->erase(userId: '42', userPublicId: (string) Str::uuid(), mode: AuditEraser::ANONYMISE, publicIds: [$keyPublicId]);
 
-    expect(erasedActivityJson($activityId, 'attribute_changes'))->toBe(['attributes' => ['name' => 'erased']]);
+    expect(erasedActivityJson($activityId, 'attribute_changes'))->toEqual(['attributes' => ['name' => 'erased']]);
 });
 
 it('scrubs every personal key in a row the person caused about no other subject', function (): void {
@@ -128,5 +129,5 @@ it('scrubs every personal key in a row the person caused about no other subject'
 
     eraseAda('42');
 
-    expect(erasedActivityJson($activityId, 'attribute_changes'))->toBe(['attributes' => ['name' => 'erased']]);
+    expect(erasedActivityJson($activityId, 'attribute_changes'))->toEqual(['attributes' => ['name' => 'erased']]);
 });
