@@ -13,6 +13,7 @@ use Qiick\Audit\Actions\CleanActivityLogAction;
 use Qiick\Audit\Actions\LogActivityAction;
 use Qiick\Audit\Anonymisation\ActivityAnonymiser;
 use Qiick\Audit\AuditContext;
+use Qiick\Audit\Console\Commands\CheckAuditCommand;
 use Qiick\Audit\Console\Commands\PurgeActivityLogCommand;
 use Qiick\Audit\Contracts\AuditActorResolver;
 use Qiick\Audit\Contracts\AuditAnonymiser;
@@ -103,7 +104,7 @@ final class AuditServiceProvider extends ServiceProvider
         $config = $this->app->make('config');
         $config->set('activitylog.clean_after_days', $config->get('audit.retention_days'));
 
-        $this->commands([PurgeActivityLogCommand::class]);
+        $this->commands([PurgeActivityLogCommand::class, CheckAuditCommand::class]);
 
         $this->callAfterResolving(Schedule::class, function (Schedule $schedule) use ($config): void {
             if ($config->get('audit.purge.schedule') !== true) {

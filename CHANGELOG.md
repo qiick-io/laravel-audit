@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fleet-standard `AuditEraser` for full and organisation-scoped erasure, with
   dry-run counts and a counts-only event after the audit transaction commits.
+- `php artisan audit:check`, the deploy check (F2): it fails on invalid
+  retention floors, on an invalid purge time while the package schedules the
+  purge, and on an `activity_log` table that lacks a column the package
+  writes, purges or erases by.
 
 ### Changed
 
