@@ -342,6 +342,15 @@ sets `activitylog.actions.clean_log` to its own clean action, so
 365 days, or a security log row younger than 730. A product that keeps it in the
 schedule loses nothing; `audit:purge` alone is enough.
 
+## Deploy check
+
+Run `php artisan audit:check` in every deploy, after `migrate`. It exits
+non-zero, naming the key, when the retention floors or `audit.purge.time` are
+invalid, or when the `activity_log` table (on the activity model's connection)
+lacks `public_id`, `organisation_id` or the configured morph id columns. The
+boot checks already stop the misconfigurations that would lose events
+(model, actions, timezone, production switches).
+
 ## Querying
 
 `Activity::query()->causedBy($user)`, `->forSubject($model)` and
