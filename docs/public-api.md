@@ -36,7 +36,7 @@ and `AuditContext::httpRequest()` are `@internal` methods of a public class.
 - `Qiick\Audit\Erasure\AuditEraser` (class)
 - `Qiick\Audit\Erasure\ErasureReport` (class)
 - `Qiick\Audit\Erasure\OrganisationScopeUnsupportedException` (class)
-- `Qiick\Audit\Events\ActivityAnonymised` (class)
+- `Qiick\Audit\Events\ActivityAnonymisedEvent` (class)
 - `Qiick\Audit\Events\SubjectErasedEvent` (class)
 - `Qiick\Audit\Laravel\AuditServiceProvider` (class)
 - `Qiick\Audit\Models\Activity` (class)
@@ -87,7 +87,7 @@ Written by the package on every row, never by callers (design §3.1): `ip`,
 
 ## Events
 
-- `Qiick\Audit\Events\ActivityAnonymised` after a direct `AuditAnonymiser::anonymise()` call commits.
+- `Qiick\Audit\Events\ActivityAnonymisedEvent` after a direct `AuditAnonymiser::anonymise()` call commits.
 - `Qiick\Audit\Events\SubjectErasedEvent` after a real `AuditEraser::erase()` call commits, with an `ErasureReport` containing counts and retention reasons.
 
 ## Artisan commands

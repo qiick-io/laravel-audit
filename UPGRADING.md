@@ -4,13 +4,19 @@ This package is **pre-release** (`0.x`). Breaking changes are allowed between
 minor versions while the major is `0`, and each break is recorded here before a
 tagged release.
 
-## Erasure scope after 0.1.0-beta.1
+## From 0.1.0-beta.1
 
-In a row the erased person only caused about another subject, the subject's
-`attribute_changes` now keep their keys (a project's `name` stays); only the
-person's identifiers, email addresses and phone numbers are replaced. A
-product that relied on those attributes being blanked passes the values it
-must remove as `identifiers`.
+- `Qiick\Audit\Events\ActivityAnonymised` is renamed
+  `Qiick\Audit\Events\ActivityAnonymisedEvent`, with the same `rows` and
+  `refs` payload. Update `Event::listen()` registrations, listener type hints
+  and `Event::fake()` / assertions, then rebuild the event cache if the app
+  caches discovered listeners. Drain queued listeners that hold the old class
+  before deploying.
+- In a row the erased person only caused about another subject, the
+  subject's `attribute_changes` now keep their keys (a project's `name`
+  stays); only the person's identifiers, email addresses and phone numbers
+  are replaced. A product that relied on those attributes being blanked
+  passes the values it must remove as `identifiers`.
 
 ## Migrations before 1.0.0
 

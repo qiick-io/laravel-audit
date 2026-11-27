@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Breaking:** `Events\ActivityAnonymised` is now `Events\ActivityAnonymisedEvent`
+  (fleet convention F5: event classes end in `Event`). The payload is the
+  same. See UPGRADING.md.
 - Erasure keeps another subject's attributes in a row the person only caused
   (a project they renamed keeps its name): `attribute_changes` lose only the
   person's identifiers, email addresses and phone numbers there; `properties`
