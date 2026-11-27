@@ -112,3 +112,32 @@ Written by the package on every row, never by callers (design §3.1): `ip`,
   externa shape; readers branch on it.
 - `[redacted]` is the value of a secret in `attribute_changes`.
 - Log names are stored trimmed and lower-cased.
+
+## Frozen at 1.0.0
+
+From `1.0.0` these change only through the deprecation policy and a new
+migration, never in place:
+
+- **Morph columns.** `audit.columns` names exactly two columns, `subject_id`
+  and `causer_id`, each a nullable `string(64)` holding a bigint, UUID or ULID
+  key as a string. Every read and write path (model relations, scopes,
+  `ActivityLogger`, the anonymiser, the eraser) uses the configured names. No
+  other column is configurable, and widening a column in place is excluded
+  (design §6.2).
+- **Row formats.** `schema_version` `0` (legacy externa shape: bigint
+  `api_key_id`, attribution keys not guaranteed) and `1` (current: §3.1
+  reserved keys, UUID `api_key_id`, string morph refs). A value above `1` is a
+  future additive format; readers branch on the value and fail closed on one
+  they do not know. Rows are never rewritten from `0` to `1`.
+- **Retention.** Two floors (`audit.retention_days`, default 365;
+  `audit.security_retention_days`, default 730, never shorter) on `created_at`,
+  the security logs named by `audit.security_log_names` (trimmed, lower case),
+  `audit:purge` as the deleting command, scheduled daily by the package unless
+  `audit.purge.schedule` is false, and `activitylog:clean` bound to the same
+  floors.
+- **Erasure interfaces.** `AuditEraser::erase()` with its named arguments and
+  `DELETE` / `ANONYMISE` modes and the optional organisation scope, `FleetAuditAnonymiserContract`, `ErasureReport`
+  and its counts, `SubjectErasedEvent` (counts only, after the outermost
+  commit), `AuditAnonymiser::anonymise()` with `ErasureSubject` and
+  `AnonymisationReport`, the erasure event for direct anonymiser calls, and
+  the constant `audit.erasure_tombstone`.
