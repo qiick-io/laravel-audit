@@ -15,9 +15,10 @@ use Qiick\Audit\Support\RetentionPurger;
 /**
  * The deploy check (fleet convention F2). The boot checks already stop a
  * misconfigured model, timezone or production switch; this command covers what
- * only fails later: the retention floors (first purge), the purge time (first
- * `schedule:run`) and the activity_log table with its configured morph columns
- * (first logged write).
+ * only fails later: the retention floors (first purge), the purge time when
+ * the package schedules the purge (first `schedule:run`), and the activity_log
+ * table with every column the package writes, purges or erases by, under the
+ * configured morph names (first logged write).
  *
  * @internal The command name `audit:check` is the public surface, not the class.
  */
@@ -34,7 +35,13 @@ final class CheckAuditCommand extends Command
             // Resolving the schedule runs the provider's purge time check.
             $this->laravel->make(Schedule::class);
             $activity = Activity::newConfiguredModel();
-            $requiredColumns = ['public_id', 'organisation_id', Activity::idColumn('subject_id'), Activity::idColumn('causer_id')];
+            // Every column the package writes, purges or erases by (docs/reference-schema.md).
+            $requiredColumns = [
+                'id', 'public_id', 'log_name', 'description', 'event',
+                'subject_type', Activity::idColumn('subject_id'), 'causer_type', Activity::idColumn('causer_id'),
+                'organisation_id', 'attribute_changes', 'properties', 'schema_version', 'request_id',
+                'anonymised_at', 'created_at', 'updated_at',
+            ];
         } catch (InvalidArgumentException $invalidConfiguration) {
             $this->error($invalidConfiguration->getMessage());
 
