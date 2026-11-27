@@ -21,6 +21,12 @@ final class PublishedConfigDefaultsTest extends PackageTestCase
 {
     private mixed $publishedColumns = ['subject_id' => 'subject_id'];
 
+    /** @var array<string, mixed> */
+    private array $publishedPurge = ['time' => '04:15'];
+
+    /** @var array<string, mixed> */
+    private array $publishedMigrations = [];
+
     public function test_a_missing_nested_key_takes_the_package_default(): void
     {
         $this->assertTrue(config('audit.purge.schedule'));
@@ -59,6 +65,36 @@ final class PublishedConfigDefaultsTest extends PackageTestCase
         $this->refreshApplication();
     }
 
+    public function test_a_schedule_flag_that_is_not_a_boolean_fails_with_its_key(): void
+    {
+        $this->publishedPurge = ['schedule' => 'true'];
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('audit.purge.schedule must be true or false.');
+
+        $this->refreshApplication();
+    }
+
+    public function test_a_migrations_flag_that_is_not_a_boolean_fails_with_its_key(): void
+    {
+        $this->publishedMigrations = ['load' => 'true'];
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('audit.migrations.load must be true or false.');
+
+        $this->refreshApplication();
+    }
+
+    public function test_an_explicit_false_is_kept(): void
+    {
+        $this->publishedPurge = ['schedule' => false];
+        $this->publishedMigrations = ['load' => false];
+        $this->refreshApplication();
+
+        $this->assertFalse(config('audit.purge.schedule'));
+        $this->assertFalse(config('audit.migrations.load'));
+    }
+
     protected function defineEnvironment($app): void
     {
         parent::defineEnvironment($app);
@@ -66,8 +102,8 @@ final class PublishedConfigDefaultsTest extends PackageTestCase
         // An older published file: whole blocks and nested keys are missing.
         $app['config']->set('audit', [
             'security_log_names' => ['auth'],
-            'purge' => ['time' => '04:15'],
-            'migrations' => [],
+            'purge' => $this->publishedPurge,
+            'migrations' => $this->publishedMigrations,
             'columns' => $this->publishedColumns,
         ]);
     }
