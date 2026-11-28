@@ -239,6 +239,51 @@ it('scrubs a unicode-escaped space inside an identifier on a causer-only row', f
     ]);
 });
 
+it('scrubs a non-ascii identifier through its \\uXXXX form on a causer-only row', function (): void {
+    $activityId = seedCausedActivity('project', '7', '42', [], [
+        'attributes' => [
+            'name' => 'Shop',
+            'note' => 'signed by Caf\\u00e9',
+        ],
+    ]);
+
+    app(AuditEraser::class)->erase(
+        userId: '42',
+        userPublicId: (string) Str::uuid(),
+        mode: AuditEraser::ANONYMISE,
+        identifiers: ['Café'],
+    );
+
+    expect(erasedActivityJson($activityId, 'attribute_changes'))->toEqual([
+        'attributes' => [
+            'name' => 'Shop',
+            'note' => 'signed by erased',
+        ],
+    ]);
+});
+
+it('scrubs every personal key when the credential row has no other subject', function (): void {
+    $keyPublicId = (string) Str::uuid();
+    $activityId = (int) DB::table('activity_log')->insertGetId([
+        'public_id' => (string) Str::uuid7(),
+        'description' => 'Exported',
+        'properties' => json_encode(['api_key_id' => $keyPublicId], JSON_THROW_ON_ERROR),
+        'attribute_changes' => json_encode(['attributes' => ['name' => 'Countess', 'email' => 'ada@example.test']], JSON_THROW_ON_ERROR),
+        'created_at' => '2026-11-25 12:00:00',
+    ]);
+
+    app(AuditEraser::class)->erase(
+        userId: '99',
+        userPublicId: (string) Str::uuid(),
+        mode: AuditEraser::ANONYMISE,
+        publicIds: [$keyPublicId],
+    );
+
+    expect(erasedActivityJson($activityId, 'attribute_changes'))->toEqual([
+        'attributes' => ['name' => 'erased', 'email' => 'erased'],
+    ]);
+});
+
 it('scrubs api_key_prefix on a causer-only row even without a matching credential UUID', function (): void {
     $activityId = seedCausedActivity('project', '7', '42', [
         'ip' => '203.0.113.9',
