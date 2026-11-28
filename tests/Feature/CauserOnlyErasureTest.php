@@ -260,11 +260,13 @@ it('keeps empty JSON objects as objects when scrubbing another value in the same
 
     eraseAda('42');
 
-    $properties = DB::table('activity_log')->where('id', $activityId)->value('properties');
-    $changes = DB::table('activity_log')->where('id', $activityId)->value('attribute_changes');
+    // Drivers disagree on JSON whitespace (MySQL stores `"meta": {}`); assert
+    // the decoded shape so empty objects stay objects, never lists.
+    $properties = json_decode((string) DB::table('activity_log')->where('id', $activityId)->value('properties'), false, 512, JSON_THROW_ON_ERROR);
+    $changes = json_decode((string) DB::table('activity_log')->where('id', $activityId)->value('attribute_changes'), false, 512, JSON_THROW_ON_ERROR);
 
-    expect($properties)->toContain('"meta":{}')
-        ->and($properties)->not->toContain('"meta":[]')
-        ->and($changes)->toContain('"options":{}')
-        ->and($changes)->not->toContain('"options":[]');
+    expect($properties->meta)->toBeInstanceOf(stdClass::class)
+        ->and(get_object_vars($properties->meta))->toBe([])
+        ->and($changes->attributes->options)->toBeInstanceOf(stdClass::class)
+        ->and(get_object_vars($changes->attributes->options))->toBe([]);
 });
