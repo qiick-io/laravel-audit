@@ -106,15 +106,22 @@ it('scrubs every personal key where the person is the subject', function (): voi
     ])->and(erasedActivityJson($activityId, 'properties'))->toEqual(['ip' => 'erased']);
 });
 
-it('scrubs every personal key where the person is the credential', function (): void {
+it('keeps the other subject\'s attributes when the person only acted through their API key', function (): void {
     $keyPublicId = (string) Str::uuid();
-    $activityId = seedCausedActivity('project', '7', '1', ['api_key_id' => $keyPublicId], [
-        'attributes' => ['name' => 'Shop'],
+    // Causer is someone else; only api_key_id links the erased person — still
+    // evidence about the project, not about the key holder as subject.
+    $activityId = seedCausedActivity('project', '7', '1', ['api_key_id' => $keyPublicId, 'ip' => '203.0.113.9'], [
+        'attributes' => ['name' => 'Shop', 'username' => 'shop-bot'],
     ]);
 
     app(AuditEraser::class)->erase(userId: '42', userPublicId: (string) Str::uuid(), mode: AuditEraser::ANONYMISE, publicIds: [$keyPublicId]);
 
-    expect(erasedActivityJson($activityId, 'attribute_changes'))->toEqual(['attributes' => ['name' => 'erased']]);
+    expect(erasedActivityJson($activityId, 'attribute_changes'))->toEqual([
+        'attributes' => ['name' => 'Shop', 'username' => 'shop-bot'],
+    ])->and(erasedActivityJson($activityId, 'properties'))->toEqual([
+        'api_key_id' => 'erased',
+        'ip' => 'erased',
+    ]);
 });
 
 it('scrubs every personal key in a row the person caused about no other subject', function (): void {
