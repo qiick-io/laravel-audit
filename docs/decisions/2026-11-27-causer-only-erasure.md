@@ -13,8 +13,10 @@ subject:
 - `properties`, the context of the request that wrote the row, lose every
   personal key as before (`ip`, `user_agent`, `email`, names, `audit.personal_keys`);
 - the subject's `attribute_changes` keep their keys; only the person's
-  identifiers (names, usernames, public ids), email addresses and phone
-  numbers are replaced, at any depth (an `assigned_to` holding their name);
+  identifiers (names, usernames, public ids, their emails and phones in plain,
+  URL-encoded or `\uXXXX` form, and numeric phone values) are replaced, at any
+  depth (an `assigned_to` holding their name). Generic email/phone patterns are
+  not applied there: they would wipe the other subject's own contacts;
 - `description` is scrubbed as before.
 
 Personal keys apply in full when the person (or one of their principals) is
