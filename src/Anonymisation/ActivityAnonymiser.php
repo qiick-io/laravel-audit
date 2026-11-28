@@ -197,8 +197,11 @@ final class ActivityAnonymiser implements FleetAuditAnonymiserContract
             // keys and only the person's identifiers (including encoded forms
             // and numeric phones) are replaced — never generic email/phone
             // patterns, which would wipe the other subject's contacts
-            // (decision 2026-11-27).
-            $isCauserOnly = $hasCauserRef && ! $hasSubjectRef && ! $hasCredential && $row->subject_type !== null;
+            // (decision 2026-11-27). Acting through their API key is still
+            // "only caused": the credential links them as actor, not as subject.
+            $isCauserOnly = ! $hasSubjectRef
+                && $row->subject_type !== null
+                && ($hasCauserRef || $hasCredential);
             $propertyKeys = $isOwnActivity ? $personalKeys : [];
             $updates = $this->rowUpdates(
                 $row,

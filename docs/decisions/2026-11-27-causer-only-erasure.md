@@ -20,7 +20,9 @@ subject:
 - `description` is scrubbed as before.
 
 Personal keys apply in full when the person (or one of their principals) is
-the subject, when one of their keys is the recorded credential, and in a
-causer row with no subject.
+the subject, and in a causer (or credential-attributed) row with no other
+subject. A row linked only by their API key (`properties.api_key_id`) that
+still has another subject is treated like causer-only: the subject's
+`attribute_changes` stay; `properties` still lose every personal key.
 
 **Tests.** `tests/Feature/CauserOnlyErasureTest.php`.
