@@ -191,8 +191,43 @@ it('scrubs a person UUID map key and a unicode-escaped identifier in causer-only
     expect(erasedActivityJson($activityId, 'attribute_changes'))->toEqual([
         'attributes' => [
             'name' => 'Shop',
-            $personPublicId => 'erased',
             'note' => 'contact: erased',
+        ],
+    ])->and(erasedActivityJson($activityId, 'attribute_changes')['attributes'])->not->toHaveKey($personPublicId);
+});
+
+it('scrubs numeric JSON object keys without aborting the erasure transaction', function (): void {
+    $activityId = seedCausedActivity('project', '7', '42', [], [
+        'attributes' => ['name' => 'Shop'],
+    ]);
+
+    // Object key "42" becomes an int via get_object_vars; must not TypeError.
+    DB::table('activity_log')->where('id', $activityId)->update([
+        'attribute_changes' => json_encode([
+            'attributes' => (object) ['42' => ['name' => 'Ada'], 'name' => 'Shop'],
+        ], JSON_THROW_ON_ERROR),
+    ]);
+
+    eraseAda('42');
+
+    expect(DB::table('activity_log')->where('id', $activityId)->value('anonymised_at'))->not->toBeNull()
+        ->and(erasedActivityJson($activityId, 'attribute_changes')['attributes']['name'])->toBe('Shop');
+});
+
+it('scrubs a unicode-escaped space inside an identifier on a causer-only row', function (): void {
+    $activityId = seedCausedActivity('project', '7', '42', [], [
+        'attributes' => [
+            'name' => 'Shop',
+            'note' => 'signed by Ada\\u0020Lovelace',
+        ],
+    ]);
+
+    eraseAda('42');
+
+    expect(erasedActivityJson($activityId, 'attribute_changes'))->toEqual([
+        'attributes' => [
+            'name' => 'Shop',
+            'note' => 'signed by erased',
         ],
     ]);
 });

@@ -357,9 +357,18 @@ final class ActivityAnonymiser implements FleetAuditAnonymiserContract
         if ($value instanceof stdClass) {
             $scrubbed = new stdClass;
 
+            // get_object_vars yields int keys for {"42":…}; scrubKeyOrValue needs a string.
             foreach (get_object_vars($value) as $key => $nestedValue) {
-                $scrubbed->{$key} = $this->scrubKeyOrValue(
-                    $key,
+                $keyName = is_string($key) ? $key : (string) $key;
+
+                // A map keyed by the person (UUID / id) is their data: drop the key
+                // so the identifier does not remain in the JSON shape.
+                if ($this->scalarMatchesIdentifier($keyName, $identifiers, $skipTombstonePrefixedIdentifiers, $tombstone)) {
+                    continue;
+                }
+
+                $scrubbed->{$keyName} = $this->scrubKeyOrValue(
+                    $keyName,
                     $nestedValue,
                     $personalKeys,
                     $identifiers,
@@ -476,6 +485,22 @@ final class ActivityAnonymiser implements FleetAuditAnonymiserContract
 
             if (str_contains($identifier, '@')) {
                 $forms[] = str_replace('@', '\\u0040', $identifier);
+            }
+
+            // JSON \\uXXXX escapes for every non-ASCII / non-portable character (space included).
+            $unicodeEscaped = preg_replace_callback(
+                '/[^\x20-\x7E]/u',
+                static fn (array $match): string => sprintf('\\u%04x', mb_ord($match[0])),
+                $identifier,
+            );
+
+            if (is_string($unicodeEscaped) && $unicodeEscaped !== $identifier) {
+                $forms[] = $unicodeEscaped;
+            }
+
+            // Spaces as \\u0020 even inside otherwise-ASCII identifiers (Ada\\u0020Lovelace).
+            if (str_contains($identifier, ' ')) {
+                $forms[] = str_replace(' ', '\\u0020', $identifier);
             }
         }
 
