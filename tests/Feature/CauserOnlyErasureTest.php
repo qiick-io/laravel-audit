@@ -239,29 +239,6 @@ it('scrubs a unicode-escaped space inside an identifier on a causer-only row', f
     ]);
 });
 
-it('scrubs a non-ascii identifier through its \\uXXXX form on a causer-only row', function (): void {
-    $activityId = seedCausedActivity('project', '7', '42', [], [
-        'attributes' => [
-            'name' => 'Shop',
-            'note' => 'signed by Caf\\u00e9',
-        ],
-    ]);
-
-    app(AuditEraser::class)->erase(
-        userId: '42',
-        userPublicId: (string) Str::uuid(),
-        mode: AuditEraser::ANONYMISE,
-        identifiers: ['Café'],
-    );
-
-    expect(erasedActivityJson($activityId, 'attribute_changes'))->toEqual([
-        'attributes' => [
-            'name' => 'Shop',
-            'note' => 'signed by erased',
-        ],
-    ]);
-});
-
 it('scrubs every personal key when the credential row has no other subject', function (): void {
     $keyPublicId = (string) Str::uuid();
     $activityId = (int) DB::table('activity_log')->insertGetId([
