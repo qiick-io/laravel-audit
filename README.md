@@ -289,8 +289,10 @@ Audit erasure is one step of the product's Art. 17 erasure.
   `auth.providers.users.model` for the user, and matches principal and key
   morphs by their supplied UUIDs. It honours `audit.columns` and confines a
   scoped run to the given `organisation_id`, excluding rows with no organisation.
-- In those rows: the personal keys at any depth of `properties` and
-  `attribute_changes`, in any spelling (`ip`, `ip_address`, `user_agent`,
+- In those rows: the personal keys at any depth of `properties`, and of
+  `attribute_changes` unless the person only caused a row about another
+  subject (that subject's attributes stay; decision
+  `docs/decisions/2026-11-27-causer-only-erasure.md`), in any spelling (`ip`, `ip_address`, `user_agent`,
   `email`, `username`, `name`, `first_name`, `last_name`, plus
   `audit.personal_keys`); every `identifiers` value as a whole word; every
   email address and phone-like sequence (8–15 digits) in any string and in

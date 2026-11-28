@@ -191,7 +191,30 @@ final class ActivityAnonymiser implements FleetAuditAnonymiserContract
             $counts['kept']++;
             $counts['subjectIds'] += $hasSubjectRef ? 1 : 0;
             $counts['causerIds'] += $hasCauserRef ? 1 : 0;
-            $updates = $this->rowUpdates($row, $properties, $subject->tombstone, $isOwnActivity ? $personalKeys : [], $identifiers, $isOwnActivity, $hasCredential);
+            // A row the person only caused about another subject is evidence
+            // about that subject: `properties` (the request's context) lose
+            // every personal key; the subject's `attribute_changes` keep their
+            // keys and only the person's identifiers (including encoded forms
+            // and numeric phones) are replaced — never generic email/phone
+            // patterns, which would wipe the other subject's contacts
+            // (decision 2026-11-27). Acting through their API key is still
+            // "only caused": the credential links them as actor, not as subject.
+            $isCauserOnly = ! $hasSubjectRef
+                && $row->subject_type !== null
+                && ($hasCauserRef || $hasCredential);
+            $propertyKeys = $isOwnActivity ? $personalKeys : [];
+            $updates = $this->rowUpdates(
+                $row,
+                $properties,
+                $subject->tombstone,
+                $propertyKeys,
+                $isCauserOnly ? [] : $propertyKeys,
+                $identifiers,
+                shouldScrubPropertyPatterns: $isOwnActivity,
+                shouldScrubChangePatterns: $isOwnActivity && ! $isCauserOnly,
+                isOwnActivity: $isOwnActivity,
+                isAlreadyAnonymised: $row->anonymised_at !== null,
+            );
 
             if ($updates === [] && $row->anonymised_at !== null) {
                 continue;
@@ -227,7 +250,8 @@ final class ActivityAnonymiser implements FleetAuditAnonymiserContract
      * Scrub the supplied identifiers there without blanking the other
      * person's names, email addresses, IP address or user agent.
      *
-     * @param  list<string>  $personalKeys  normalised (SecretAttributeFloor::normalise())
+     * @param  list<string>  $propertyKeys  scrubbed in `properties`, normalised (SecretAttributeFloor::normalise())
+     * @param  list<string>  $changeKeys  scrubbed in `attribute_changes`, normalised
      * @param  list<string>  $identifiers  longest first
      * @return array<string, string>
      */
@@ -235,52 +259,129 @@ final class ActivityAnonymiser implements FleetAuditAnonymiserContract
         stdClass $row,
         mixed $properties,
         string $tombstone,
-        array $personalKeys,
+        array $propertyKeys,
+        array $changeKeys,
         array $identifiers,
-        bool $shouldScrubPatterns,
-        bool $hasCredential,
+        bool $shouldScrubPropertyPatterns,
+        bool $shouldScrubChangePatterns,
+        bool $isOwnActivity,
+        bool $isAlreadyAnonymised,
     ): array {
         $updates = [];
+        $skipTombstonePrefixedIdentifiers = $isAlreadyAnonymised;
 
         $description = self::stringColumn($row, 'description');
-        $scrubbedDescription = $this->scrubText($description, $identifiers, $tombstone, $shouldScrubPatterns);
+        $scrubbedDescription = $this->scrubText(
+            $description,
+            $identifiers,
+            $tombstone,
+            $shouldScrubPropertyPatterns,
+            $skipTombstonePrefixedIdentifiers,
+        );
 
         if ($scrubbedDescription !== $description) {
             $updates['description'] = $scrubbedDescription;
         }
 
-        $propertyKeys = $hasCredential ? [...$personalKeys, 'apikeyprefix'] : $personalKeys;
-        $scrubbedProperties = $this->scrubValue($properties, $propertyKeys, $identifiers, $tombstone, $shouldScrubPatterns);
+        // The request's credential prefix names the person even when the row
+        // only links them as causer (no matching api_key_id in publicIds).
+        if ($isOwnActivity) {
+            $propertyKeys = [...$propertyKeys, 'apikeyprefix'];
+        }
 
-        if ($scrubbedProperties !== $properties) {
-            $updates['properties'] = json_encode($scrubbedProperties, JSON_THROW_ON_ERROR);
+        $scrubbedProperties = $this->scrubValue(
+            $properties,
+            $propertyKeys,
+            $identifiers,
+            $tombstone,
+            $shouldScrubPropertyPatterns,
+            $skipTombstonePrefixedIdentifiers,
+        );
+
+        if (self::jsonPayload($scrubbedProperties) !== self::jsonPayload($properties)) {
+            $updates['properties'] = self::jsonPayload($scrubbedProperties);
         }
 
         $changes = self::jsonColumn($row, 'attribute_changes');
-        $scrubbedChanges = $this->scrubValue($changes, $personalKeys, $identifiers, $tombstone, $shouldScrubPatterns);
+        $scrubbedChanges = $this->scrubValue(
+            $changes,
+            $changeKeys,
+            $identifiers,
+            $tombstone,
+            $shouldScrubChangePatterns,
+            $skipTombstonePrefixedIdentifiers,
+        );
 
-        if ($scrubbedChanges !== $changes) {
-            $updates['attribute_changes'] = json_encode($scrubbedChanges, JSON_THROW_ON_ERROR);
+        if (self::jsonPayload($scrubbedChanges) !== self::jsonPayload($changes)) {
+            $updates['attribute_changes'] = self::jsonPayload($scrubbedChanges);
         }
 
         return $updates;
     }
 
+    /**
+     * Decode JSON as objects so empty `{}` stays an object through a rewrite
+     * (associative decode would turn it into `[]` on encode).
+     */
     private static function jsonColumn(stdClass $row, string $column): mixed
     {
         return $row->{$column} === null
             ? null
-            : json_decode(self::stringColumn($row, $column), true, flags: JSON_THROW_ON_ERROR);
+            : json_decode(self::stringColumn($row, $column), flags: JSON_THROW_ON_ERROR);
+    }
+
+    private static function jsonPayload(mixed $value): string
+    {
+        return json_encode($value, JSON_THROW_ON_ERROR);
     }
 
     /**
      * @param  list<string>  $personalKeys
      * @param  list<string>  $identifiers
      */
-    private function scrubValue(mixed $value, array $personalKeys, array $identifiers, string $tombstone, bool $shouldScrubPatterns): mixed
-    {
+    private function scrubValue(
+        mixed $value,
+        array $personalKeys,
+        array $identifiers,
+        string $tombstone,
+        bool $shouldScrubPatterns,
+        bool $skipTombstonePrefixedIdentifiers,
+    ): mixed {
         if (is_string($value)) {
-            return $this->scrubText($value, $identifiers, $tombstone, $shouldScrubPatterns);
+            return $this->scrubText($value, $identifiers, $tombstone, $shouldScrubPatterns, $skipTombstonePrefixedIdentifiers);
+        }
+
+        if (is_int($value) || is_float($value)) {
+            return $this->scalarMatchesIdentifier((string) $value, $identifiers, $skipTombstonePrefixedIdentifiers, $tombstone)
+                ? $tombstone
+                : $value;
+        }
+
+        if ($value instanceof stdClass) {
+            $scrubbed = new stdClass;
+
+            // get_object_vars yields int keys for {"42":…}; scrubKeyOrValue needs a string.
+            foreach (get_object_vars($value) as $key => $nestedValue) {
+                $keyName = is_string($key) ? $key : (string) $key;
+
+                // A map keyed by the person (UUID / id) is their data: drop the key
+                // so the identifier does not remain in the JSON shape.
+                if ($this->scalarMatchesIdentifier($keyName, $identifiers, $skipTombstonePrefixedIdentifiers, $tombstone)) {
+                    continue;
+                }
+
+                $scrubbed->{$keyName} = $this->scrubKeyOrValue(
+                    $keyName,
+                    $nestedValue,
+                    $personalKeys,
+                    $identifiers,
+                    $tombstone,
+                    $shouldScrubPatterns,
+                    $skipTombstonePrefixedIdentifiers,
+                );
+            }
+
+            return $scrubbed;
         }
 
         if (! is_array($value)) {
@@ -290,23 +391,65 @@ final class ActivityAnonymiser implements FleetAuditAnonymiserContract
         $scrubbed = [];
 
         foreach ($value as $key => $nestedValue) {
-            $scrubbed[$key] = is_string($key) && in_array(SecretAttributeFloor::normalise($key), $personalKeys, true)
-                ? $tombstone
-                : $this->scrubValue($nestedValue, $personalKeys, $identifiers, $tombstone, $shouldScrubPatterns);
+            $scrubbed[$key] = is_string($key)
+                ? $this->scrubKeyOrValue(
+                    $key,
+                    $nestedValue,
+                    $personalKeys,
+                    $identifiers,
+                    $tombstone,
+                    $shouldScrubPatterns,
+                    $skipTombstonePrefixedIdentifiers,
+                )
+                : $this->scrubValue($nestedValue, $personalKeys, $identifiers, $tombstone, $shouldScrubPatterns, $skipTombstonePrefixedIdentifiers);
         }
 
         return $scrubbed;
     }
 
     /**
+     * @param  list<string>  $personalKeys
+     * @param  list<string>  $identifiers
+     */
+    private function scrubKeyOrValue(
+        string $key,
+        mixed $nestedValue,
+        array $personalKeys,
+        array $identifiers,
+        string $tombstone,
+        bool $shouldScrubPatterns,
+        bool $skipTombstonePrefixedIdentifiers,
+    ): mixed {
+        if (in_array(SecretAttributeFloor::normalise($key), $personalKeys, true)) {
+            return $tombstone;
+        }
+
+        // A map keyed by the person's public id is their data, not the subject's.
+        if ($this->scalarMatchesIdentifier($key, $identifiers, $skipTombstonePrefixedIdentifiers, $tombstone)) {
+            return $tombstone;
+        }
+
+        return $this->scrubValue($nestedValue, $personalKeys, $identifiers, $tombstone, $shouldScrubPatterns, $skipTombstonePrefixedIdentifiers);
+    }
+
+    /**
      * @param  list<string>  $identifiers  longest first
      */
-    private function scrubText(string $text, array $identifiers, string $tombstone, bool $shouldScrubPatterns = true): string
-    {
+    private function scrubText(
+        string $text,
+        array $identifiers,
+        string $tombstone,
+        bool $shouldScrubPatterns = true,
+        bool $skipTombstonePrefixedIdentifiers = false,
+    ): string {
         // Treat the configured tombstone as text, even if it contains "$1".
         $replacement = static fn (): string => $tombstone;
 
-        foreach ($identifiers as $identifier) {
+        foreach ($this->identifierForms($identifiers) as $identifier) {
+            if ($skipTombstonePrefixedIdentifiers && self::startsWithTombstone($identifier, $tombstone)) {
+                continue;
+            }
+
             // Whole words only: a short name (`Al`) must not corrupt `Alarm`.
             $text = preg_replace_callback(ErasureSubject::identifierPattern($identifier), $replacement, $text)
                 ?? throw new RuntimeException('An identifier could not be scrubbed.');
@@ -324,6 +467,68 @@ final class ActivityAnonymiser implements FleetAuditAnonymiserContract
             fn (array $match): string => preg_match('/\A\d{4}-\d{2}-\d{2}\z/', $match[0]) === 1 ? $match[0] : $tombstone,
             $text,
         ) ?? throw new RuntimeException('Phone numbers could not be scrubbed.');
+    }
+
+    /**
+     * @param  list<string>  $identifiers
+     * @return list<string> longest first, with URL- and unicode-encoded forms
+     */
+    private function identifierForms(array $identifiers): array
+    {
+        $forms = [];
+
+        foreach ($identifiers as $identifier) {
+            $forms[] = $identifier;
+
+            $urlEncoded = rawurlencode($identifier);
+
+            if ($urlEncoded !== $identifier) {
+                $forms[] = $urlEncoded;
+            }
+
+            if (str_contains($identifier, '@')) {
+                $forms[] = str_replace('@', '\\u0040', $identifier);
+            }
+
+            // Spaces as \\u0020 (Ada\\u0020Lovelace in JSON text). Non-ASCII letters are
+            // passed as identifiers in their literal form by the caller when needed.
+            if (str_contains($identifier, ' ')) {
+                $forms[] = str_replace(' ', '\\u0020', $identifier);
+            }
+        }
+
+        usort($forms, fn (string $left, string $right): int => mb_strlen($right) <=> mb_strlen($left));
+
+        return $forms;
+    }
+
+    /**
+     * @param  list<string>  $identifiers
+     */
+    private function scalarMatchesIdentifier(
+        string $value,
+        array $identifiers,
+        bool $skipTombstonePrefixedIdentifiers,
+        string $tombstone,
+    ): bool {
+        foreach ($this->identifierForms($identifiers) as $identifier) {
+            if ($skipTombstonePrefixedIdentifiers && self::startsWithTombstone($identifier, $tombstone)) {
+                continue;
+            }
+
+            if (strcasecmp($value, $identifier) === 0) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static function startsWithTombstone(string $identifier, string $tombstone): bool
+    {
+        return str_starts_with(mb_strtolower($identifier), mb_strtolower($tombstone))
+            && (mb_strlen($identifier) === mb_strlen($tombstone)
+                || ! preg_match('/\A[\p{L}\p{N}]/u', mb_substr($identifier, mb_strlen($tombstone))));
     }
 
     private static function stringColumn(stdClass $row, string $column): string

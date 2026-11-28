@@ -12,6 +12,11 @@ tagged release.
   and `Event::fake()` / assertions, then rebuild the event cache if the app
   caches discovered listeners. Drain queued listeners that hold the old class
   before deploying.
+- In a row the erased person only caused about another subject, the
+  subject's `attribute_changes` now keep their keys (a project's `name`
+  stays); only the person's identifiers, email addresses and phone numbers
+  are replaced. A product that relied on those attributes being blanked
+  passes the values it must remove as `identifiers`.
 
 ## Migrations before 1.0.0
 
