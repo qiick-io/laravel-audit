@@ -42,8 +42,9 @@ Second pre-release, the 1.0 release candidate contract: what freezes at
   same. See UPGRADING.md.
 - Erasure keeps another subject's attributes in a row the person only caused
   (a project they renamed keeps its name): `attribute_changes` lose only the
-  person's identifiers, email addresses and phone numbers there; `properties`
-  still lose every personal key.
+  person's identifiers (including encoded emails and numeric phones); generic
+  email/phone patterns are not applied there so the other subject's contacts
+  stay; `properties` still lose every personal key.
 
 ### Fixed
 
