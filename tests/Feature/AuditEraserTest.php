@@ -154,7 +154,7 @@ it('erases an identifier that overlaps the shared tombstone', function (string $
         ->and($eraser->erase('420000', $publicId, AuditEraser::ANONYMISE, identifiers: [$identifier])->changed())->toBe(0);
 })->with(['Ed', 'ERASED']);
 
-it('scrubs all personal data when the API key is the only link to the person', function (): void {
+it('scrubs request data and the person\'s identifiers when the API key is the only link, keeping other subject attributes', function (): void {
     $credentialId = (string) Str::uuid();
     $activityId = seedFleetActivity([
         'subject_type' => 'invoice',
@@ -166,12 +166,21 @@ it('scrubs all personal data when the API key is the only link to the person', f
             'ip' => '203.0.113.9',
             'user_agent' => 'AdaBot/1.0',
         ], JSON_THROW_ON_ERROR),
-        'attribute_changes' => json_encode(['old' => ['email' => 'ada@example.test']], JSON_THROW_ON_ERROR),
+        // Person's email in old (identifier) vs invoice label that must stay.
+        'attribute_changes' => json_encode([
+            'old' => ['email' => 'ada@example.test', 'label' => 'Acme invoice'],
+        ], JSON_THROW_ON_ERROR),
     ]);
     $eraser = app(AuditEraser::class);
     $publicId = (string) Str::uuid();
 
-    $report = $eraser->erase('420000', $publicId, AuditEraser::ANONYMISE, [$credentialId]);
+    $report = $eraser->erase(
+        '420000',
+        $publicId,
+        AuditEraser::ANONYMISE,
+        [$credentialId],
+        identifiers: ['ada@example.test', '+39 333 123 4567'],
+    );
     expect($report->stores['activity_log'])->toBe([
         'deleted' => 0,
         'anonymised' => 1,
@@ -183,7 +192,9 @@ it('scrubs all personal data when the API key is the only link to the person', f
     expect($row->description)->toBe('Invoice updated by erased or erased')
         ->and(json_decode($row->properties, true, flags: JSON_THROW_ON_ERROR))
         ->toMatchArray(['api_key_id' => 'erased', 'api_key_prefix' => 'erased', 'ip' => 'erased', 'user_agent' => 'erased'])
-        ->and(json_decode($row->attribute_changes, true, flags: JSON_THROW_ON_ERROR))->toBe(['old' => ['email' => 'erased']])
+        ->and(json_decode($row->attribute_changes, true, flags: JSON_THROW_ON_ERROR))->toBe([
+            'old' => ['email' => 'erased', 'label' => 'Acme invoice'],
+        ])
         ->and($eraser->erase('420000', $publicId, AuditEraser::ANONYMISE, [$credentialId])->changed())->toBe(0);
 });
 

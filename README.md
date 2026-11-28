@@ -12,7 +12,7 @@
 
 PHPStan at `max` and the existing CI checks cover PHP. CodeQL covers GitHub Actions and JavaScript/TypeScript.
 
-> **Pre-release.** `0.1.0-beta.1` is on Packagist for qiick products. Do not
+> **Pre-release.** `0.1.0-beta.2` is on Packagist for qiick products. Do not
 > depend on it outside the fleet before `1.0.0`.
 
 Shared audit log for qiick Laravel products, on top of
@@ -29,7 +29,7 @@ Part of the qiick fleet. Binding design:
 
 ## Status
 
-Pre-release: `0.1.0-beta.1`, on Packagist. Public APIs may change in any 0.x
+Pre-release: `0.1.0-beta.2`, on Packagist. Public APIs may change in any 0.x
 release, each break recorded in [UPGRADING.md](./UPGRADING.md). The contract
 that freezes at `1.0.0` is listed in [docs/public-api.md](./docs/public-api.md#frozen-at-100).
 
@@ -289,8 +289,10 @@ Audit erasure is one step of the product's Art. 17 erasure.
   `auth.providers.users.model` for the user, and matches principal and key
   morphs by their supplied UUIDs. It honours `audit.columns` and confines a
   scoped run to the given `organisation_id`, excluding rows with no organisation.
-- In those rows: the personal keys at any depth of `properties` and
-  `attribute_changes`, in any spelling (`ip`, `ip_address`, `user_agent`,
+- In those rows: the personal keys at any depth of `properties`, and of
+  `attribute_changes` unless the person only caused a row about another
+  subject (that subject's attributes stay; decision
+  `docs/decisions/2026-11-27-causer-only-erasure.md`), in any spelling (`ip`, `ip_address`, `user_agent`,
   `email`, `username`, `name`, `first_name`, `last_name`, plus
   `audit.personal_keys`); every `identifiers` value as a whole word; every
   email address and phone-like sequence (8–15 digits) in any string and in
