@@ -499,7 +499,7 @@ final class ActivityAnonymiser implements FleetAuditAnonymiserContract
 
         usort($forms, fn (string $left, string $right): int => mb_strlen($right) <=> mb_strlen($left));
 
-        return array_unique($forms);
+        return $forms;
     }
 
     /**
