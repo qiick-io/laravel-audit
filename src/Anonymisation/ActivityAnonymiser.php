@@ -490,18 +490,8 @@ final class ActivityAnonymiser implements FleetAuditAnonymiserContract
                 $forms[] = str_replace('@', '\\u0040', $identifier);
             }
 
-            // JSON \\uXXXX escapes for every non-ASCII / non-portable character (space included).
-            $unicodeEscaped = preg_replace_callback(
-                '/[^\x20-\x7E]/u',
-                static fn (array $match): string => sprintf('\\u%04x', mb_ord($match[0])),
-                $identifier,
-            );
-
-            if (is_string($unicodeEscaped) && $unicodeEscaped !== $identifier) {
-                $forms[] = $unicodeEscaped;
-            }
-
-            // Spaces as \\u0020 even inside otherwise-ASCII identifiers (Ada\\u0020Lovelace).
+            // Spaces as \\u0020 (Ada\\u0020Lovelace in JSON text). Non-ASCII letters are
+            // passed as identifiers in their literal form by the caller when needed.
             if (str_contains($identifier, ' ')) {
                 $forms[] = str_replace(' ', '\\u0020', $identifier);
             }
@@ -509,7 +499,7 @@ final class ActivityAnonymiser implements FleetAuditAnonymiserContract
 
         usort($forms, fn (string $left, string $right): int => mb_strlen($right) <=> mb_strlen($left));
 
-        return array_values(array_unique($forms));
+        return array_unique($forms);
     }
 
     /**
