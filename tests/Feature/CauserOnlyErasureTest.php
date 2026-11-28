@@ -131,3 +131,140 @@ it('scrubs every personal key in a row the person caused about no other subject'
 
     expect(erasedActivityJson($activityId, 'attribute_changes'))->toEqual(['attributes' => ['name' => 'erased']]);
 });
+
+it('scrubs the person\'s encoded email and numeric phone in old without wiping the subject\'s contacts', function (): void {
+    config()->set('audit.personal_keys', ['phone_number']);
+
+    $activityId = seedCausedActivity('project', '7', '42', [], [
+        'attributes' => [
+            'name' => 'Shop',
+            'email' => 'shop@example.test',
+            'phone_number' => '390212345678',
+            'order_reference' => '12345678',
+        ],
+        'old' => [
+            'email' => 'ada%40example.test',
+            'phone_number' => 393331234567,
+            'name' => 'Store',
+        ],
+    ]);
+
+    app(AuditEraser::class)->erase(
+        userId: '42',
+        userPublicId: (string) Str::uuid(),
+        mode: AuditEraser::ANONYMISE,
+        identifiers: ['Ada Lovelace', 'ada@example.test', 'ada.l', '393331234567'],
+    );
+
+    expect(erasedActivityJson($activityId, 'attribute_changes'))->toEqual([
+        'attributes' => [
+            'name' => 'Shop',
+            'email' => 'shop@example.test',
+            'phone_number' => '390212345678',
+            'order_reference' => '12345678',
+        ],
+        'old' => [
+            'email' => 'erased',
+            'phone_number' => 'erased',
+            'name' => 'Store',
+        ],
+    ]);
+});
+
+it('scrubs a person UUID map key and a unicode-escaped identifier in causer-only attributes', function (): void {
+    $personPublicId = (string) Str::uuid();
+    $activityId = seedCausedActivity('project', '7', '42', [], [
+        'attributes' => [
+            'name' => 'Shop',
+            $personPublicId => ['role' => 'owner'],
+            'note' => 'contact: ada\u0040example.test',
+        ],
+    ]);
+
+    app(AuditEraser::class)->erase(
+        userId: '42',
+        userPublicId: $personPublicId,
+        mode: AuditEraser::ANONYMISE,
+        identifiers: ['ada@example.test'],
+    );
+
+    expect(erasedActivityJson($activityId, 'attribute_changes'))->toEqual([
+        'attributes' => [
+            'name' => 'Shop',
+            $personPublicId => 'erased',
+            'note' => 'contact: erased',
+        ],
+    ]);
+});
+
+it('scrubs api_key_prefix on a causer-only row even without a matching credential UUID', function (): void {
+    $activityId = seedCausedActivity('project', '7', '42', [
+        'ip' => '203.0.113.9',
+        'user_agent' => 'Firefox',
+        'api_key_prefix' => 'exc_live_ada',
+    ], [
+        'attributes' => ['name' => 'Shop'],
+    ]);
+
+    eraseAda('42');
+
+    expect(erasedActivityJson($activityId, 'properties'))->toEqual([
+        'ip' => 'erased',
+        'user_agent' => 'erased',
+        'api_key_prefix' => 'erased',
+    ])->and(erasedActivityJson($activityId, 'attribute_changes'))->toEqual([
+        'attributes' => ['name' => 'Shop'],
+    ]);
+});
+
+it('does not rewrite a causer-only row on a second erasure run', function (): void {
+    $activityId = seedCausedActivity('project', '7', '42', [], [
+        'attributes' => ['title' => 'Ticket for ada.l.net'],
+    ]);
+
+    $first = app(AuditEraser::class)->erase(
+        userId: '42',
+        userPublicId: (string) Str::uuid(),
+        mode: AuditEraser::ANONYMISE,
+        identifiers: ['erased.net', 'ada.l'],
+    );
+    $afterFirst = erasedActivityJson($activityId, 'attribute_changes');
+    $anonymisedAt = DB::table('activity_log')->where('id', $activityId)->value('anonymised_at');
+
+    $second = app(AuditEraser::class)->erase(
+        userId: '42',
+        userPublicId: (string) Str::uuid(),
+        mode: AuditEraser::ANONYMISE,
+        identifiers: ['erased.net', 'ada.l'],
+    );
+
+    expect($first->changed())->toBe(1)
+        ->and($second->changed())->toBe(0)
+        ->and(erasedActivityJson($activityId, 'attribute_changes'))->toEqual($afterFirst)
+        ->and(DB::table('activity_log')->where('id', $activityId)->value('anonymised_at'))->toBe($anonymisedAt);
+});
+
+it('keeps empty JSON objects as objects when scrubbing another value in the same column', function (): void {
+    $activityId = seedCausedActivity('project', '7', '42', [
+        'ip' => '203.0.113.9',
+        'meta' => new stdClass,
+    ], [
+        'attributes' => ['name' => 'Shop', 'options' => new stdClass],
+    ]);
+
+    // Seed with real empty objects (json_encode of stdClass), not PHP arrays.
+    DB::table('activity_log')->where('id', $activityId)->update([
+        'properties' => json_encode(['ip' => '203.0.113.9', 'meta' => new stdClass], JSON_THROW_ON_ERROR),
+        'attribute_changes' => json_encode(['attributes' => ['name' => 'Shop', 'options' => new stdClass]], JSON_THROW_ON_ERROR),
+    ]);
+
+    eraseAda('42');
+
+    $properties = DB::table('activity_log')->where('id', $activityId)->value('properties');
+    $changes = DB::table('activity_log')->where('id', $activityId)->value('attribute_changes');
+
+    expect($properties)->toContain('"meta":{}')
+        ->and($properties)->not->toContain('"meta":[]')
+        ->and($changes)->toContain('"options":{}')
+        ->and($changes)->not->toContain('"options":[]');
+});
